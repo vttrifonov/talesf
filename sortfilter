@@ -1,0 +1,54 @@
+#!/usr/bin/env perl
+use strict;
+use Getopt::Long;
+
+my $limit = 10;
+my $sort  = 1;
+
+GetOptions
+(
+  "h|help"        => sub { print_usage(\*STDOUT) and exit(1); },
+  "l|limit=i"     => \$limit,
+  "s|sortbyscore" => sub { $sort = 0 },
+);
+
+my @sites;
+while(my $line = <STDIN>)
+{
+  next if($line =~ m/^#/);
+  my @v = split(/\t/, $line);
+  my @r = ($v[5], $line);
+  push(@sites, \@r);
+}
+
+printf("##gff-version\t3\n");
+my @sorted_sites;
+if($sort)
+{
+  @sorted_sites = sort { $a->[0] <=> $b->[0] } @sites;
+}
+else
+{
+  @sorted_sites = @sites;
+}
+
+my $i = 0;
+foreach my $site(@sorted_sites)
+{
+  last unless($i++ < $limit);
+  print $site->[1];
+}
+
+sub print_usage
+{
+  my $OUT = shift(@_);
+  print($OUT "
+Usage: sortfilter [options] < sites.gff3
+  Options:
+    -h|--help             print this help message and quit
+    -l|--limit            print only the first l sites; default is 10
+    -s|--sortbypos        sort binding sites by genomic position; default is to
+                          sort by binding site score
+
+");
+}
