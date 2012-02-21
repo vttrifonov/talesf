@@ -2,41 +2,56 @@
 use strict;
 use Getopt::Long;
 
-my $limit = 10;
-my $sort  = 1;
+my $limit    = 0;
+my $sortmode = 0;
 
 GetOptions
 (
   "h|help"        => sub { print_usage(\*STDOUT) and exit(1); },
   "l|limit=i"     => \$limit,
-  "s|sortbyscore" => sub { $sort = 0 },
+  "s|sortbyscore" => \$sortmode,
 );
 
 my @sites;
+my $sites_by_seq;
 while(my $line = <STDIN>)
 {
   next if($line =~ m/^#/);
   my @v = split(/\t/, $line);
-  my @r = ($v[5], $line);
-  push(@sites, \@r);
+  
+  if($sortmode == 1)
+  {
+    my @r = ($v[5], $line);
+    push(@sites, \@r);
+  }
+  else
+  {
+    $sites_by_seq->{ $v[0] }->{ $v[3] } = $line;
+  }
 }
 
 printf("##gff-version\t3\n");
-my @sorted_sites;
-if($sort)
+if($sortmode == 1)
 {
-  @sorted_sites = sort { $a->[0] <=> $b->[0] } @sites;
+  my $i = 0;
+  foreach my $site(sort { $a->[0] <=> $b->[0] } @sites)
+  {
+    last unless($limit == 0 || $i++ < $limit);
+    print $site->[1];
+  }
 }
 else
 {
-  @sorted_sites = @sites;
-}
-
-my $i = 0;
-foreach my $site(@sorted_sites)
-{
-  last unless($i++ < $limit);
-  print $site->[1];
+  my $i = 0;
+  foreach my $seq( sort keys %$sites_by_seq )
+  {
+    foreach my $start( sort {$a <=> $b} keys %{$sites_by_seq->{$seq}} )
+    {
+      print $sites_by_seq->{$seq}->{$start};
+      last unless($i++ < $limit);
+    }
+    last unless($i < $limit);
+  }
 }
 
 sub print_usage
@@ -46,9 +61,10 @@ sub print_usage
 Usage: sortfilter [options] < sites.gff3
   Options:
     -h|--help             print this help message and quit
-    -l|--limit            print only the first l sites; default is 10
-    -s|--sortbypos        sort binding sites by genomic position; default is to
-                          sort by binding site score
+    -l|--limit            print only the first l sites; default is 0 (print all
+                          binding sites
+    -s|--sortbyscore      sort binding sites by binding site score; default is
+                          to sort by genomic position
 
 ");
 }
