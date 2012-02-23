@@ -48,9 +48,9 @@ else
     foreach my $start( sort {$a <=> $b} keys %{$sites_by_seq->{$seq}} )
     {
       print $sites_by_seq->{$seq}->{$start};
-      last unless($i++ < $limit);
+      last unless($limit == 0 || $i++ < $limit);
     }
-    last unless($i < $limit);
+    last unless($limit == 0 || $i < $limit);
   }
 }
 
