@@ -9,6 +9,8 @@ For compiling, try this.
 
 */
 
+#define TALESF_ALLOW_CURL_CALLBACK
+
 // System libraries
 #include <getopt.h>
 #include <math.h>
@@ -17,6 +19,11 @@ For compiling, try this.
 #include <zlib.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
+
+#ifdef TALESF_ALLOW_CURL_CALLBACK
+#include <curl/curl.h>
+#endif
 
 // Include my libraries
 #include "Array.h"
@@ -26,6 +33,13 @@ For compiling, try this.
 #include "kseq.h"
 KSEQ_INIT(gzFile, gzread)
 
+#ifdef TALESF_ALLOW_CURL_CALLBACK
+CURL *curl_handle = NULL;
+char *task_error_callback_url = NULL;
+char *task_success_callback_url = NULL;
+#endif
+
+
 typedef struct
 {
   int strand;
@@ -34,6 +48,27 @@ typedef struct
   unsigned long index;
   double score;
 } BindingSite;
+
+int error_handler(char* error_message, ...) {
+
+  va_list args;
+  va_start(args, error_message);
+  vfprintf(stderr, error_message, args);
+  va_end(args);
+
+  #ifdef TALESF_ALLOW_CURL_CALLBACK
+
+    if (task_error_callback_url != NULL && curl_handle) {
+      curl_easy_setopt(curl_handle, CURLOPT_URL, task_error_callback_url);
+      curl_easy_setopt(curl_handle, CURLOPT_NOBODY, 1);
+      curl_easy_perform(curl_handle);
+    }
+
+  #endif
+
+  return 1;
+
+}
 
 int binding_site_compare_score(const void * a, const void * b)
 {
@@ -69,37 +104,46 @@ void print_results(Array *results, char *sourcestr, Array* rvdseq, double best_s
 
     for(i = 0; i < num_rvds; i++)
     {
-      char *rvd = array_get(rvdseq, i);
-      if(i == 0)
-        strncpy(rvdstring, rvd, 2);
-      else
-        sprintf(rvdstring + (i*3)-1, "_%s", rvd);
+        char *rvd = array_get(rvdseq, i);
+        if(i == 0)
+            strncpy(rvdstring, rvd, 2);
+        else
+            sprintf(rvdstring + (i*3)-1, "_%s", rvd);
     }
     rvdstring[3*num_rvds - 1] = '\0';
 
-    if(create_tabfile)
-    {
+    if(output_filepath == NULL) {
 
-        output_filepath_length = strlen(output_filepath) + 5;
-        temp_output_filepath = calloc(output_filepath_length + 1, sizeof(char));
+        create_tabfile = 0;
 
-        sprintf(temp_output_filepath, "%s.txt", output_filepath);
-        tab_out_file = fopen(temp_output_filepath, "w");
-        memset(temp_output_filepath, '\0', output_filepath_length);
-        sprintf(temp_output_filepath, "%s.gff3", output_filepath);
-        gff_out_file = fopen(temp_output_filepath, "w");
-        free(temp_output_filepath);
+        gff_out_file = stdout;
 
-    }
-    else
-    {
-        gff_out_file = fopen(output_filepath, "w");
+    } else {
+
+        if(create_tabfile)
+        {
+
+            output_filepath_length = strlen(output_filepath) + 5;
+            temp_output_filepath = calloc(output_filepath_length + 1, sizeof(char));
+
+            sprintf(temp_output_filepath, "%s.txt", output_filepath);
+            tab_out_file = fopen(temp_output_filepath, "w");
+            memset(temp_output_filepath, '\0', output_filepath_length);
+            sprintf(temp_output_filepath, "%s.gff3", output_filepath);
+            gff_out_file = fopen(temp_output_filepath, "w");
+            free(temp_output_filepath);
+
+        }
+        else
+        {
+            gff_out_file = fopen(output_filepath, "w");
+        }
+
     }
 
     if(!gff_out_file || (create_tabfile && !tab_out_file))
     {
-        fprintf(stderr, "Error: unable to open output file '%s'\n", output_filepath);
-        return;
+        exit(error_handler("Error: unable to open output file '%s'\n", output_filepath));
     }
 
     if(create_tabfile)
@@ -131,53 +175,52 @@ void print_results(Array *results, char *sourcestr, Array* rvdseq, double best_s
     for(i = 0; i < array_size(results); i++)
     {
 
-      BindingSite *site = (BindingSite *)array_get(results, i);
-      char *sequence = site->sequence;
+        BindingSite *site = (BindingSite *)array_get(results, i);
+        char *sequence = site->sequence;
 
-      if(site->strand > 0)
-        plus_strand_sequence = sequence;
-      else
-      {
-        int j;
-
-        plus_strand_sequence = sequence;
-        sequence = malloc(sizeof(char)*(num_rvds+1));
-        sequence[num_rvds] = '\0';
-
-        for(j = 0; j < num_rvds; j++)
+        if(site->strand > 0)
+            plus_strand_sequence = sequence;
+        else
         {
-          char base = site->sequence[num_rvds - j - 1];
-          if(base == 'A' || base == 'a')
-            sequence[j] = 'T';
-          else if(base == 'C' || base == 'c')
-            sequence[j] = 'G';
-          else if(base == 'G' || base == 'g')
-            sequence[j] = 'C';
-          else if(base == 'T' || base == 't')
-            sequence[j] = 'A';
-          else
-          {
-            fprintf(stderr, "Error: unexpected character '%c'\n", base);
-            exit(1);
-          }
+            int j;
+
+            plus_strand_sequence = sequence;
+            sequence = malloc(sizeof(char)*(num_rvds+1));
+            sequence[num_rvds] = '\0';
+
+            for(j = 0; j < num_rvds; j++)
+            {
+                char base = site->sequence[num_rvds - j - 1];
+                if(base == 'A' || base == 'a')
+                    sequence[j] = 'T';
+                else if(base == 'C' || base == 'c')
+                    sequence[j] = 'G';
+                else if(base == 'G' || base == 'g')
+                    sequence[j] = 'C';
+                else if(base == 'T' || base == 't')
+                    sequence[j] = 'A';
+                else
+                {
+                    exit(error_handler("Error: unexpected character '%c'\n", base));
+                }
+            }
+            strand = '-';
+            tab_strand = "Minus";
         }
-        strand = '-';
-        tab_strand = "Minus";
-      }
 
-      if(create_tabfile)
-      {
-          fprintf( tab_out_file, "%s\t%s\t%.2lf\t%lu\t%s\t%s\n",
-                   site->sequence_name, tab_strand, site->score, site->index + 1, sequence, plus_strand_sequence);
-      }
+        if(create_tabfile)
+        {
+            fprintf( tab_out_file, "%s\t%s\t%.2lf\t%lu\t%s\t%s\n",
+                     site->sequence_name, tab_strand, site->score, site->index + 1, sequence, plus_strand_sequence);
+        }
 
-      fprintf( gff_out_file, "%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;\n",
-               site->sequence_name, sourcestr, "TAL_effector_binding_site", site->index + 1,
-               site->index + num_rvds, site->score, strand, rvdstring, sequence);
+        fprintf( gff_out_file, "%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;\n",
+                 site->sequence_name, sourcestr, "TAL_effector_binding_site", site->index + 1,
+                 site->index + num_rvds, site->score, strand, rvdstring, sequence);
 
-      if(plus_strand_sequence != sequence) {
-          free(sequence);
-      }
+        if(plus_strand_sequence != sequence) {
+            free(sequence);
+        }
 
     }
 
@@ -482,7 +525,15 @@ int main(int argc, char **argv)
   // Parse options
   progname = argv[0];
   int opt, optindex;
+
+  #ifdef TALESF_ALLOW_CURL_CALLBACK
+  curl_handle = curl_easy_init();
+  curl_easy_setopt(curl_handle, CURLOPT_NOBODY, 1);
+  const char *optstr = "tfhn:o:s:w:x:y:z:";
+  #else
   const char *optstr = "tfhn:o:s:w:x:";
+  #endif
+
   const struct option otsf_options[] =
   {
     { "tabfile", no_argument, NULL, 't' },
@@ -493,6 +544,10 @@ int main(int argc, char **argv)
     { "source", required_argument, NULL, 's' },
     { "weight", required_argument, NULL, 'w' },
     { "cutoffmult", required_argument, NULL, 'x' },
+    #ifdef TALESF_ALLOW_CURL_CALLBACK
+    { "onerror", required_argument, NULL, 'y' },
+    { "onsuccess", required_argument, NULL, 'z' },
+    #endif
     { NULL, no_argument, NULL, 0 },
   };
 
@@ -517,8 +572,7 @@ int main(int argc, char **argv)
       case 'n':
         if( sscanf(optarg, "%d", &numprocs) == EOF )
         {
-          fprintf(stderr, "Error: unable to convert numprocs '%s' to an integer\n", optarg);
-          return 1;
+          exit(error_handler("Error: unable to convert numprocs '%s' to an integer\n", optarg));
         }
         break;
 
@@ -540,28 +594,54 @@ int main(int argc, char **argv)
      case 'w':
        if( sscanf(optarg, "%lf", &w) == EOF )
        {
-         fprintf(stderr, "Error: unable to convert weight '%s' to a double\n", optarg);
-         return 1;
+         exit(error_handler("Error: unable to convert weight '%s' to a double\n", optarg));
        }
        break;
 
      case 'x':
        if( sscanf(optarg, "%lf", &x) == EOF )
        {
-         fprintf(stderr, "Error: unable to convert cutoff multiple '%s' to a double\n", optarg);
-         return 1;
+         exit(error_handler("Error: unable to convert cutoff multiple '%s' to a double\n", optarg));
        }
        break;
+
+     #ifdef TALESF_ALLOW_CURL_CALLBACK
+
+     case 'y':
+
+       if(task_error_callback_url != NULL) {
+           free(task_error_callback_url);
+           task_error_callback_url = NULL;
+       }
+       task_error_callback_url = calloc(strlen(optarg) + 1, sizeof(char));
+       strcpy(task_error_callback_url, optarg);
+
+       break;
+
+     case 'z':
+
+       if(task_success_callback_url != NULL) {
+           free(task_success_callback_url);
+           task_success_callback_url = NULL;
+       }
+       task_success_callback_url = calloc(strlen(optarg) + 1, sizeof(char));
+       strcpy(task_success_callback_url, optarg);
+
+       break;
+
+     #endif
+
     }
   }
 
   // Parse arguments
   if(argc - optind != 2)
   {
-    fputs("Error: must provide genomic sequence (file) and RVD sequence (string)...no more, no less\n", stderr);
+    error_handler("Error: must provide sequence (file) and RVD sequence (string)...no more, no less\n");
     print_usage(stderr, progname);
-    return 1;
+    exit(1);
   }
+
   seqfilename = argv[optind];
   rvdstring = argv[optind + 1];
 
@@ -593,7 +673,7 @@ int main(int argc, char **argv)
   if(!in)
   {
     perror("Error: unable to check fasta file size\n");
-    return 1;
+    exit(error_handler("Error: unable to check fasta file size\n"));
   }
   fgets(line, sizeof(line), in);
   pclose(in);
@@ -610,8 +690,7 @@ int main(int argc, char **argv)
     seqfile = gzopen(seqfilename, "r");
     if(!seqfile)
     {
-      fprintf(stderr, "Error: unable to open genomic sequence '%s'\n", seqfilename);
-      exit(1);
+      exit(error_handler("Error: unable to open genomic sequence '%s'\n", seqfilename));
     }
     seq = kseq_init(seqfile);
 
@@ -624,8 +703,7 @@ int main(int argc, char **argv)
         int result = kseq_read(seq);
         if(result < 0)
         {
-          fprintf(stderr, "Error: problem parsing data from '%s'\n", seqfilename);
-          exit(1);
+          exit(error_handler("Error: problem parsing data from '%s'\n", seqfilename));
         }
         j++;
       }
@@ -649,11 +727,11 @@ int main(int argc, char **argv)
   free(output_filepath);
   for(i = 0; i < array_size(results); i++)
   {
-      BindingSite *site = (BindingSite *)array_get(results, i);
+    BindingSite *site = (BindingSite *)array_get(results, i);
 
-      free(site->sequence);
-      free(site->sequence_name);
-      free(site);
+    free(site->sequence);
+    free(site->sequence_name);
+    free(site);
 
   }
 
@@ -669,6 +747,29 @@ int main(int argc, char **argv)
 
   array_delete(rvdseq);
   hashmap_delete(diresidue_scores, free);
+
+  #ifdef TALESF_ALLOW_CURL_CALLBACK
+
+  if(curl_handle != NULL) {
+
+    if(task_success_callback_url != NULL) {
+
+      curl_easy_setopt(curl_handle, CURLOPT_URL, task_success_callback_url);
+      curl_easy_perform(curl_handle);
+
+      free(task_success_callback_url);
+
+    }
+
+    curl_easy_cleanup(curl_handle);
+
+  }
+
+  if(task_error_callback_url != NULL) {
+    free(task_error_callback_url);
+  }
+
+  #endif
 
   return 0;
 }
