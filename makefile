@@ -1,7 +1,7 @@
 LIB = libtalesf.so
 
 default:
-	gcc -Wall -O3 -m64 -o $(LIB) *.c -lm -lz -fopenmp -fPIC -shared -rdynamic
+	gcc -g -O3 -Wall -m64 -o $(LIB) *.c -lm -lz -fopenmp -fPIC -shared -rdynamic
 
 clean:
 	rm -f *.o *~ $(LIB)
