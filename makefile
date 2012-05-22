@@ -8,6 +8,7 @@ clean:
 
 install:
 	install $(LIB) /usr/lib
-	cp talesf.h /usr/include
-	chmod 644 /usr/include/talesf.h
+	mkdir -p /usr/include/talesf
+	cp *.h /usr/include/talesf
+	chmod 644 /usr/include/talesf/*
 	ldconfig
