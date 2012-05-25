@@ -6,7 +6,7 @@ With the exception of the Kseq library (self-contained in the `kseq.h' file),
 all source code included herein is available under an ISC license.
 
 Copyright (c) 2011-2012, Daniel S. Standage <daniel.standage@gmail.com> and
-Erin Doyle <edoyle@iastate.edu>.
+Erin Doyle <edoyle@iastate.edu> with modifications by Nick Booher <njbooher@gmail.com>.
 
 Permission to use, copy, modify, and/or distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
@@ -45,5 +45,6 @@ For more information on available options:
 By default, the output data is sorted by score. The 'sortfilter' script
 is provided as a tool for (surprise!) sorting and filtering output from TALESF.
 For a descriptive usage statement, enter the following command.
-
+```
   ./sortfilter -h
+```
