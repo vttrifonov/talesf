@@ -7,13 +7,14 @@
 // Print usage statement
 void print_usage(FILE *out_stream, char *prog_name)
 {
-  fprintf( out_stream, "\nUsage: %s [options] genomeseq \"rvdseq\"\n"
+  fprintf( out_stream, "\nUsage: %s [options] sequence_file_path \"rvdseq\"\n"
            "  Options:\n"
            "    -c|--cupstream        sets the allowed upstream bases; 0 for T only, 1 for C only, 2 for either\n"
            "    -f|--forwardonly      only search the forward strand of the sequence\n"
            "    -h|--help             print this help message and exit\n"
            "    -n|--numprocs         the number of processors to use; default is 1\n"
-           "    -o|--outfile          file to which output will be written\n"
+           "    -o|--outfile          template filename to which output will be written; both a tab-delimited file "
+           "                          and gff3 file will be produced \n"
            "    -w|--weight           user-defined weight; default is 0.9\n"
            "    -x|--cutoffmult       multiple of best score at which potential sites will be\n"
            "                          filtered; default is 3.0\n\n", prog_name );
@@ -69,7 +70,7 @@ int main(int argc, char **argv)
         break;
 
       case 'c':
-        if( sscanf(optarg, "%d", &c_upstream) == EOF )
+        if( sscanf(optarg, "%d", &c_upstream) != 1 )
         {
           fprintf(stderr, "Error: unable to convert cupstream '%s' to an integer\n", optarg);
           return 1;
@@ -87,7 +88,7 @@ int main(int argc, char **argv)
         return 0;
 
       case 'n':
-        if( sscanf(optarg, "%d", &num_procs) == EOF )
+        if( sscanf(optarg, "%d", &num_procs) != 1 )
         {
           fprintf(stderr, "Error: unable to convert numprocs '%s' to an integer\n", optarg);
           return 1;
@@ -99,7 +100,7 @@ int main(int argc, char **argv)
         break;
 
       case 'w':
-        if( sscanf(optarg, "%lf", &weight) == EOF )
+        if( sscanf(optarg, "%lf", &weight) != 1 )
         {
           fprintf(stderr, "Error: unable to convert weight '%s' to a double\n", optarg);
           return 1;
@@ -107,7 +108,7 @@ int main(int argc, char **argv)
         break;
 
       case 'x':
-        if( sscanf(optarg, "%lf", &cutoff) == EOF )
+        if( sscanf(optarg, "%lf", &cutoff) != 1 )
         {
           fprintf(stderr, "Error: unable to convert cutoff multiple '%s' to a double\n", optarg);
           return 1;
