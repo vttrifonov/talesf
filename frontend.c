@@ -26,36 +26,40 @@ int main(int argc, char **argv)
   char *prog_name;
   char *seq_filepath;
   char *rvd_string;
+  char *rvd_string2;
   char *log_filepath;
-  int forward_only;
   int num_procs;
   char out_filepath[256];
   int c_upstream;
   double weight;
   double cutoff;
+  int min;
+  int max;
 
   // Set Defaults
 
-  forward_only = 0;
   num_procs = 1;
   weight = 0.9;
   cutoff = 3.0;
   log_filepath = "NA";
   c_upstream = 0;
+  min = 15;
+  max = 30;
 
   prog_name = argv[0];
 
   int opt, opt_index;
-  const char *opt_str = "c:fhn:o:s:w:x:";
+  const char *opt_str = "c:hn:o:s:w:t:m:x:";
   const struct option otsf_options[] =
   {
-    { "forwardonly", no_argument, NULL, 'f' },
     { "help", no_argument, NULL, 'h' },
     { "numprocs", required_argument, NULL, 'n' },
     { "outfile", required_argument, NULL, 'o' },
     { "weight", required_argument, NULL, 'w' },
-    { "cutoffmult", required_argument, NULL, 'x' },
+    { "cutoffmult", required_argument, NULL, 't' },
     { "cupstream", required_argument, NULL, 'c' },
+    { "min", required_argument, NULL, 'm' },
+    { "max", required_argument, NULL, 'x' },
     { NULL, no_argument, NULL, 0 },
   };
 
@@ -65,9 +69,6 @@ int main(int argc, char **argv)
   {
     switch(opt)
     {
-      case 'f':
-        forward_only = 1;
-        break;
 
       case 'c':
         if( sscanf(optarg, "%d", &c_upstream) != 1 )
@@ -95,6 +96,22 @@ int main(int argc, char **argv)
         }
         break;
 
+      case 'm':
+        if( sscanf(optarg, "%d", &min) != 1 )
+        {
+          fprintf(stderr, "Error: unable to convert min '%s' to an integer\n", optarg);
+          return 1;
+        }
+        break;
+
+      case 'x':
+        if( sscanf(optarg, "%d", &max) != 1 )
+        {
+          fprintf(stderr, "Error: unable to convert max '%s' to an integer\n", optarg);
+          return 1;
+        }
+        break;
+
       case 'o':
         strcpy(out_filepath, optarg);
         break;
@@ -107,7 +124,7 @@ int main(int argc, char **argv)
         }
         break;
 
-      case 'x':
+      case 't':
         if( sscanf(optarg, "%lf", &cutoff) != 1 )
         {
           fprintf(stderr, "Error: unable to convert cutoff multiple '%s' to a double\n", optarg);
@@ -118,7 +135,7 @@ int main(int argc, char **argv)
   }
 
   // Parse arguments
-  if(argc - optind != 2)
+  if(argc - optind != 3)
   {
     fputs("Error: must provide sequence (file) and RVD sequence (string)\n", stderr);
     print_usage(stderr, prog_name);
@@ -127,18 +144,21 @@ int main(int argc, char **argv)
 
   seq_filepath = argv[optind];
   rvd_string = argv[optind + 1];
+  rvd_string2 = argv[optind + 2];
 
   Hashmap *talesf_kwargs = hashmap_new(32);
 
   hashmap_add(talesf_kwargs, "seq_filename", seq_filepath);
   hashmap_add(talesf_kwargs, "rvd_string", rvd_string);
+  hashmap_add(talesf_kwargs, "rvd_string2", rvd_string2);
   hashmap_add(talesf_kwargs, "output_filepath", out_filepath);
   hashmap_add(talesf_kwargs, "log_filepath", log_filepath);
   hashmap_add(talesf_kwargs, "weight", &weight);
   hashmap_add(talesf_kwargs, "cutoff", &cutoff);
-  hashmap_add(talesf_kwargs, "forward_only", &forward_only);
   hashmap_add(talesf_kwargs, "c_upstream", &c_upstream);
   hashmap_add(talesf_kwargs, "num_procs", &num_procs);
+  hashmap_add(talesf_kwargs, "spacer_min", &min);
+  hashmap_add(talesf_kwargs, "spacer_max", &max);
   hashmap_add(talesf_kwargs, "organism_name", "");
 
   int task_result = run_talesf_task(talesf_kwargs);
