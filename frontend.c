@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <omp.h>
 
-#include "talesf.h"
+#include "pairedtalesf.h"
 #include "Hashmap.h"
 
 // Print usage statement
@@ -168,7 +168,7 @@ int main(int argc, char **argv)
   hashmap_add(talesf_kwargs, "spacer_max", &max);
   hashmap_add(talesf_kwargs, "organism_name", "");
 
-  int task_result = run_talesf_task(talesf_kwargs);
+  int task_result = run_paired_talesf_task(talesf_kwargs);
 
   hashmap_delete(talesf_kwargs, NULL);
 

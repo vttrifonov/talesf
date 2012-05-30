@@ -625,7 +625,7 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *
 
 }
 
-int run_talesf_task(Hashmap *kwargs) {
+int run_paired_talesf_task(Hashmap *kwargs) {
 
   talesf_kwargs = kwargs;
 
