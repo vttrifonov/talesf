@@ -1,5 +1,6 @@
 #include <getopt.h>
 #include <stdio.h>
+#include <omp.h>
 
 #include "talesf.h"
 #include "Hashmap.h"
@@ -10,13 +11,14 @@ void print_usage(FILE *out_stream, char *prog_name)
   fprintf( out_stream, "\nUsage: %s [options] sequence_file_path \"rvdseq\"\n"
            "  Options:\n"
            "    -c|--cupstream        sets the allowed upstream bases; 0 for T only, 1 for C only, 2 for either\n"
-           "    -f|--forwardonly      only search the forward strand of the sequence\n"
            "    -h|--help             print this help message and exit\n"
+           "    -m|--min              the minimum allowed spacer size; default is 15\n"
            "    -n|--numprocs         the number of processors to use; default is 1\n"
            "    -o|--outfile          template filename to which output will be written; both a tab-delimited file "
            "                          and gff3 file will be produced \n"
            "    -w|--weight           user-defined weight; default is 0.9\n"
-           "    -x|--cutoffmult       multiple of best score at which potential sites will be\n"
+           "    -x|--max              the maximum allowed spacer size; default is 30\n"
+           "    -t|--cutoffmult       multiple of best score at which potential sites will be\n"
            "                          filtered; default is 3.0\n\n", prog_name );
 }
 
@@ -94,6 +96,11 @@ int main(int argc, char **argv)
           fprintf(stderr, "Error: unable to convert numprocs '%s' to an integer\n", optarg);
           return 1;
         }
+        if( num_procs > omp_get_num_procs())
+        {
+          fprintf(stderr, "Error: numprocs was %d but only %d are available\n", num_procs, omp_get_num_procs());
+          return 1;
+        }
         break;
 
       case 'm':
@@ -137,7 +144,7 @@ int main(int argc, char **argv)
   // Parse arguments
   if(argc - optind != 3)
   {
-    fputs("Error: must provide sequence (file) and RVD sequence (string)\n", stderr);
+    fputs("Error: must provide sequence (file path) and 2 RVD sequences (strings)\n", stderr);
     print_usage(stderr, prog_name);
     return 1;
   }
