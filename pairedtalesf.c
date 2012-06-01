@@ -319,39 +319,30 @@ int binding_site_compare_pos(const void * a, const void * b) {
   BindingSite *real_b = *((BindingSite **)b);
 
   int str_cmp_result = strcmp(real_a->sequence_name, real_b->sequence_name);
-  long pos_diff = real_a->indexes[0] - real_b->indexes[0];
-  long pos_diff2 = real_a->indexes[1] - real_b->indexes[1];
 
   if (str_cmp_result != 0) {
 
     return str_cmp_result;
 
-  }
-  else if (real_a->f_idx < real_b->f_idx) {
+  } else if (real_a->f_idx != real_b->f_idx) {
 
-    return -1;
+    return ((real_a->f_idx < real_b->f_idx) ? -1 : 1);
 
-  } else if (real_a->r_idx < real_b->r_idx) {
+  } else if (real_a->r_idx != real_b->r_idx) {
 
-    return -1;
+    return ((real_a->r_idx < real_b->r_idx) ? -1 : 1);
+
+  } else if (real_a->indexes[0] != real_b->indexes[0]) {
+
+    return ((real_a->indexes[0] < real_b->indexes[0]) ? -1 : 1);
+
+  } else if (real_a->indexes[1] != real_b->indexes[1]) {
+
+    return ((real_a->indexes[1] < real_b->indexes[1]) ? -1 : 1);
 
   } else {
 
-    if (pos_diff < 0) {
-      return -1;
-    } else if (pos_diff > 0) {
-      return 1;
-    } else {
-
-      if (pos_diff2 < 0) {
-        return -1;
-      } else if (pos_diff2 > 0) {
-        return 1;
-      } else {
-        return 0;
-      }
-
-    }
+    return 0;
 
   }
 
@@ -389,7 +380,13 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
 
   if (!tab_out_file) {
     fprintf(log_file, "Error: unable to open output file '%s'\n", output_filepath);
+
+    // TODO: find a better way to do this
+    free(rvd_string_printable);
+    free(rvd_string2_printable);
+
     return 1;
+
   }
 
   //fprintf(tab_out_file, options_str);
@@ -398,8 +395,7 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
   fprintf(tab_out_file, "TAL2 Best Possible Score:%.2lf\n", best_score2);
   fprintf(tab_out_file, "Sequence Name\tTAL 1\tTAL 2\tTAL 1 Score\tTAL 2 Score\tTAL 1 Start\tTAL 2 Start\tSpacer Length\tTAL 1 Target\tTAL 2 Target\n");
 
-  int tal2_seq_len = array_size(rvd_seqs[1]) + 2;
-  char *tal2_sequence = calloc(tal2_seq_len + 1, sizeof(char));
+
 
   for (unsigned long i = 0; i < array_size(results); i++)
   {
@@ -408,6 +404,9 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
 
     char tal1_name[16];
     char tal2_name[16];
+
+    int tal2_seq_len = array_size(rvd_seqs[site->r_idx]) + 2;
+    char *tal2_sequence = calloc(tal2_seq_len + 1, sizeof(char));
 
     sprintf(tal1_name, "TAL%d", site->f_idx + 1);
     sprintf(tal2_name, "TAL%d", site->r_idx + 1);
@@ -427,18 +426,26 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
         tal2_sequence[j] = ' ';
       else
       {
-        fprintf(stderr, "Error: unexpected character '%c'\n", base);
-        exit(1);
+        fprintf(stderr, "Error: unexpected character '%d'\n", base);
+
+        // TODO: find a better way to do this
+        free(tal2_sequence);
+        free(rvd_string_printable);
+        free(rvd_string2_printable);
+        fclose(tab_out_file);
+
+        return 1;
+
       }
     }
 
     fprintf( tab_out_file, "%s\t%s\t%s\t%.2lf\t%.2lf\t%lu\t%lu\t%d\t%s\t%s\n",
              site->sequence_name, tal1_name, tal2_name, site->scores[0], site->scores[1], site->indexes[0], site->indexes[1], site->spacer_length, site->sequence[0], tal2_sequence);
 
+    free(tal2_sequence);
 
   }
 
-  free(tal2_sequence);
   free(rvd_string_printable);
   free(rvd_string2_printable);
   fclose(tab_out_file);
