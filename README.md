@@ -35,11 +35,11 @@ containing this file.
 ```
 To run the program with default options:
 ```
-  ./talesf -o test_output_file path_to_fasta_input_file "RVD SEQUENCE" "RVD SEQUENCE2"
+  ./pairedtalesf -o test_output_file path_to_fasta_input_file "RVD SEQUENCE" "RVD SEQUENCE2"
 ```
 For more information on available options:
 ```
-  ./talesf -h
+  ./pairedtalesf -h
 ```
 
 By default, the output data is sorted by score. The 'sortfilter' script
