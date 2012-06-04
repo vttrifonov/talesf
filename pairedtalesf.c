@@ -564,6 +564,14 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *
   int c_upstream = *((int *) hashmap_get(talesf_kwargs, "c_upstream"));
   int spacer_min = *((int *) hashmap_get(talesf_kwargs, "spacer_min"));
   int spacer_max = *((int *) hashmap_get(talesf_kwargs, "spacer_max"));
+  
+  int count_only = *((int *) hashmap_get(talesf_kwargs, "count_only"));
+  
+  int **count_results_array = NULL;
+  
+  if (count_only) {
+    count_results_array = hashmap_get(talesf_kwargs, "count_results_array");
+  }
 
   if (array_size(rvd_seqs[0]) + array_size(rvd_seqs[0]) + spacer_min > seq->seq.l) {
     logger(log_file, "Warning: skipping sequence '%s' since it is shorter than the RVD sequence\n", seq->seq.s);
@@ -608,11 +616,19 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *
                  double reverse_score = score_binding_site(seq, j - num_reverse_rvds + 1, reverse_rvd_seq, diresidue_scores, reverse_cutoff, 1);
                  
                  if (reverse_score <= reverse_cutoff) {
-                     
-                   BindingSite *site = create_binding_site(seq, i, j, num_forward_rvds, forward_score, num_reverse_rvds, reverse_score, spacer_size, f_idx, r_idx);
                    
-                   #pragma omp critical (add_result)
-                   array_add(results, site);
+                   if (count_only) {
+                     
+                     count_results_array[f_idx][r_idx]++;
+                     
+                   } else {
+                   
+                     BindingSite *site = create_binding_site(seq, i, j, num_forward_rvds, forward_score, num_reverse_rvds, reverse_score, spacer_size, f_idx, r_idx);
+                   
+                     #pragma omp critical (add_result)
+                     array_add(results, site);
+                   
+                   }
                    
                  }
                    
@@ -646,6 +662,8 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   double cutoff = *((double *) hashmap_get(kwargs, "cutoff"));
 
   int numprocs = *((int *) hashmap_get(kwargs, "num_procs"));
+  
+  int count_only = *((int *) hashmap_get(kwargs, "count_only"));
 
   // Setup the logger
 
@@ -765,9 +783,13 @@ int run_paired_talesf_task(Hashmap *kwargs) {
 
   if (!abort) {
 
-    qsort(results->data, array_size(results), sizeof(BindingSite *), binding_site_compare_pos);
-
-    abort = print_results(results, rvd_seqs, best_score, best_score2, log_file);
+    if (!count_only) {
+      
+      qsort(results->data, array_size(results), sizeof(BindingSite *), binding_site_compare_pos);
+      
+      abort = print_results(results, rvd_seqs, best_score, best_score2, log_file);
+    
+    }
 
     logger(log_file, "Finished");
 

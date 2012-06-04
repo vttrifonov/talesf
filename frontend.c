@@ -167,6 +167,9 @@ int main(int argc, char **argv)
   hashmap_add(talesf_kwargs, "spacer_min", &min);
   hashmap_add(talesf_kwargs, "spacer_max", &max);
   hashmap_add(talesf_kwargs, "organism_name", "");
+  
+  int count_only = 0;
+  hashmap_add(talesf_kwargs, "count_only", &count_only);
 
   int task_result = run_paired_talesf_task(talesf_kwargs);
 
