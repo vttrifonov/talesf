@@ -35,7 +35,7 @@ containing this file.
 ```
 To run the program with default options:
 ```
-  ./talesf -o test_output_file path_to_fasta_input_file "RVD SEQUENCE"
+  ./talesf -o test_output_file path_to_fasta_input_file "RVD SEQUENCE" "RVD SEQUENCE2"
 ```
 For more information on available options:
 ```
