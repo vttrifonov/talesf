@@ -8,7 +8,7 @@
 // Print usage statement
 void print_usage(FILE *out_stream, char *prog_name)
 {
-  fprintf( out_stream, "\nUsage: %s [options] sequence_file_path \"rvdseq\"\n"
+  fprintf( out_stream, "\nUsage: %s [options] sequence_file_path \"rvdseq\" \"rvdseq2\"\n"
            "  Options:\n"
            "    -c|--cupstream        sets the allowed upstream bases; 0 for T only, 1 for C only, 2 for either\n"
            "    -h|--help             print this help message and exit\n"

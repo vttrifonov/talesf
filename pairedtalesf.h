@@ -3,6 +3,6 @@
 
 #include <Hashmap.h>
 
-int run_talesf_task(Hashmap *kwargs);
+int run_paired_talesf_task(Hashmap *kwargs);
 
 #endif
