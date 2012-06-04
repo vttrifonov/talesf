@@ -101,8 +101,9 @@ Hashmap *get_diresidue_probabilities(Array *rvdseq, double w)
   for(i = 0; i < array_size(rvdseq); i++)
   {
     char *rvd = array_get(rvdseq, i);
-    // hashmap_add doesn't do anything for existing key, only adds new ones
-    hashmap_add(diresidue_counts, rvd, int_array(1, 1, 1, 1));
+    if (hashmap_get(diresidue_counts, rvd) == NULL) {
+      hashmap_add(diresidue_counts, rvd, int_array(1, 1, 1, 1));
+    }
   }
 
   diresidue_probabilities = hashmap_new(64);
