@@ -262,7 +262,7 @@ double *create_lookahead_array(Array *rvd_seq, double cutoff, double best_score,
   
   for (int i = array_size(rvd_seq) - 2; i >= 0; i--) {
     
-    double *scores = hashmap_get(diresidue_scores, array_get(rvd_seq, i));
+    double *scores = hashmap_get(diresidue_scores, array_get(rvd_seq, i + 1));
     
     double min = scores[0];
     
@@ -272,7 +272,7 @@ double *create_lookahead_array(Array *rvd_seq, double cutoff, double best_score,
       }
     }
     
-    lookahead_array[i] = lookahead_array[i + 1] - (min * cutoff);
+    lookahead_array[i] = lookahead_array[i + 1] - (min);
       
   }
   
@@ -480,9 +480,10 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
 
 }
 
-double score_binding_site(kseq_t *seq, unsigned long i, Array *rvd_seq, Hashmap *diresidue_scores, double cutoff, int reverse) {
+double score_binding_site(kseq_t *seq, unsigned long i, Array *rvd_seq, Hashmap *diresidue_scores, double *lookahead_array, int reverse) {
 
   double total_score = 0.0;
+  int num_rvds = array_size(rvd_seq);
 
   if (!reverse) {
 
@@ -500,10 +501,10 @@ double score_binding_site(kseq_t *seq, unsigned long i, Array *rvd_seq, Hashmap 
       else if (seq->seq.s[i+j] == 'T' || seq->seq.s[i+j] == 't')
         total_score += scores[3];
       else
-        total_score += cutoff + 1;
+        total_score += lookahead_array[num_rvds - 1] + 1;
 
-      if (total_score > cutoff)
-        break;
+      if (total_score > lookahead_array[j])
+        return -1;
 
     }
 
@@ -511,22 +512,24 @@ double score_binding_site(kseq_t *seq, unsigned long i, Array *rvd_seq, Hashmap 
 
     for (unsigned long j = 0; j < array_size(rvd_seq); j++) {
 
-      char *rvd = array_get(rvd_seq, array_size(rvd_seq) - j - 1);
+      char *rvd = array_get(rvd_seq, j);
       double *scores = hashmap_get(diresidue_scores, rvd);
 
-      if (seq->seq.s[i+j] == 'A' || seq->seq.s[i+j-1] == 'a')
+      unsigned long k = i + array_size(rvd_seq) - j - 1;
+
+      if (seq->seq.s[k] == 'A' || seq->seq.s[k] == 'a')
         total_score += scores[3];
-      else if (seq->seq.s[i+j] == 'C' || seq->seq.s[i+j-1] == 'c')
+      else if (seq->seq.s[k] == 'C' || seq->seq.s[k] == 'c')
         total_score += scores[2];
-      else if (seq->seq.s[i+j] == 'G' || seq->seq.s[i+j-1] == 'g')
+      else if (seq->seq.s[k] == 'G' || seq->seq.s[k] == 'g')
         total_score += scores[1];
-      else if (seq->seq.s[i+j] == 'T' || seq->seq.s[i+j-1] == 't')
+      else if (seq->seq.s[k] == 'T' || seq->seq.s[k] == 't')
         total_score += scores[0];
       else
-        total_score += cutoff + 1;
+        total_score += lookahead_array[num_rvds - 1] + 1;
 
-      if (total_score > cutoff)
-        break;
+      if (total_score > lookahead_array[j])
+        return -1;
     }
 
   }
@@ -585,7 +588,7 @@ BindingSite *create_binding_site(kseq_t *seq, unsigned long i, unsigned long j, 
 }
 
 // Identify and print out TAL effector binding sites
-void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *diresidue_scores, double *cutoffs, Array *results) {
+void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *diresidue_scores, double **lookahead_arrays, Array *results) {
 
   int c_upstream = *((int *) hashmap_get(talesf_kwargs, "c_upstream"));
   int spacer_min = *((int *) hashmap_get(talesf_kwargs, "spacer_min"));
@@ -613,8 +616,8 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *
       Array *forward_rvd_seq = rvd_seqs[f_idx];
       Array *reverse_rvd_seq = rvd_seqs[r_idx];
       
-      double forward_cutoff = cutoffs[f_idx];
-      double reverse_cutoff = cutoffs[r_idx];
+      double *forward_lookahead = lookahead_arrays[f_idx];
+      double *reverse_lookahead = lookahead_arrays[r_idx];
         
       int num_forward_rvds = array_size(forward_rvd_seq);
       int num_reverse_rvds = array_size(reverse_rvd_seq);
@@ -625,9 +628,9 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *
         
         if ((c_upstream != 0 && (forward_upstream == 'C' || forward_upstream == 'c')) || (c_upstream != 1 && (forward_upstream == 'T' || forward_upstream == 't'))) {
           
-          double forward_score = score_binding_site(seq, i, forward_rvd_seq, diresidue_scores, forward_cutoff, 0);
+          double forward_score = score_binding_site(seq, i, forward_rvd_seq, diresidue_scores, forward_lookahead, 0);
           
-          if (forward_score <= forward_cutoff) {
+          if (forward_score != -1) {
               
             for (int spacer_size = spacer_min; spacer_size < spacer_max + 1; spacer_size++) {
                 
@@ -639,13 +642,17 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *
                
                if ((c_upstream != 0 && (reverse_upstream == 'G' || reverse_upstream == 'g')) || (c_upstream != 1 && (reverse_upstream == 'A' || reverse_upstream == 'a'))) {
                    
-                 double reverse_score = score_binding_site(seq, j - num_reverse_rvds + 1, reverse_rvd_seq, diresidue_scores, reverse_cutoff, 1);
+                 double reverse_score = score_binding_site(seq, j - num_reverse_rvds + 1, reverse_rvd_seq, diresidue_scores, reverse_lookahead, 1);
                  
-                 if (reverse_score <= reverse_cutoff) {
+                 if (reverse_score != -1) {
                    
                    if (count_only) {
                      
                      count_results_array[f_idx][r_idx]++;
+
+//                     if (count_results_array[f_idx][r_idx] >= 5) {
+//                       return;
+//                     }
                      
                    } else {
                    
@@ -745,15 +752,10 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   
   // Define score cutoffs for match sites
 
-  double cutoffs[2];
+  double *lookahead_arrays[2];
   
-  cutoffs[0] = cutoff * best_score;
-  cutoffs[1] = cutoff * best_score2;
-  
-//  double *lookahead_arrays[2];
-  
-//  lookahead_arrays[0] = create_lookahead_array(rvd_seq, cutoff, best_score, diresidue_scores);
-//  lookahead_arrays[0] = create_lookahead_array(rvd_seq2, cutoff, best_score2, diresidue_scores);
+  lookahead_arrays[0] = create_lookahead_array(rvd_seq, cutoff, best_score, diresidue_scores);
+  lookahead_arrays[1] = create_lookahead_array(rvd_seq2, cutoff, best_score2, diresidue_scores);
 
   // Begin processing
 
@@ -798,7 +800,7 @@ int run_paired_talesf_task(Hashmap *kwargs) {
           }
 
           if (!abort) {
-            find_binding_sites(log_file, seq, rvd_seqs, diresidue_scores, cutoffs, results);
+            find_binding_sites(log_file, seq, rvd_seqs, diresidue_scores, lookahead_arrays, results);
           }
 
         }
@@ -845,6 +847,8 @@ int run_paired_talesf_task(Hashmap *kwargs) {
 
   }
 
+  free(lookahead_arrays[0]);
+  free(lookahead_arrays[1]);
 
   if (rvd_seq) {
     array_delete(rvd_seq, free);
