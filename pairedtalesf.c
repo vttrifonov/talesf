@@ -254,6 +254,32 @@ Array *rvd_string_to_array(char *rvd_string) {
 
 }
 
+double *create_lookahead_array(Array *rvd_seq, double cutoff, double best_score, Hashmap *diresidue_scores) {
+  
+  double *lookahead_array = calloc(array_size(rvd_seq), sizeof(double));
+  
+  lookahead_array[array_size(rvd_seq) - 1] = cutoff * best_score;
+  
+  for (int i = array_size(rvd_seq) - 2; i >= 0; i--) {
+    
+    double *scores = hashmap_get(diresidue_scores, array_get(rvd_seq, i));
+    
+    double min = scores[0];
+    
+    for (int j = 0; j < 4; j++) {
+      if (scores[j] < min) {
+        min = scores[j];
+      }
+    }
+    
+    lookahead_array[i] = lookahead_array[i + 1] - (min * cutoff);
+      
+  }
+  
+  return lookahead_array;
+
+}
+
 void str_replace(char *haystack, char *needle, char *replacement) {
 
   char *pos = strstr(haystack, needle);
@@ -723,6 +749,11 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   
   cutoffs[0] = cutoff * best_score;
   cutoffs[1] = cutoff * best_score2;
+  
+//  double *lookahead_arrays[2];
+  
+//  lookahead_arrays[0] = create_lookahead_array(rvd_seq, cutoff, best_score, diresidue_scores);
+//  lookahead_arrays[0] = create_lookahead_array(rvd_seq2, cutoff, best_score2, diresidue_scores);
 
   // Begin processing
 
