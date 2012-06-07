@@ -377,13 +377,22 @@ int binding_site_compare_pos(const void * a, const void * b) {
 int print_results(Array *results, Array **rvd_seqs, double best_score, double best_score2, FILE *log_file) {
 
   char *output_filepath = hashmap_get(talesf_kwargs, "output_filepath");
+  char *organism_name = hashmap_get(talesf_kwargs, "organism_name");
 
+  double combined_best_score = best_score + best_score2;
+
+  char *source_str = "TALESF";
   char options_str[512];
 
   // strcat doesn't seem to work unless you do this
   *options_str = '\0';
 
   FILE *tab_out_file = NULL;
+  FILE *gff_out_file = NULL;
+  FILE *genome_browser_file = NULL;
+
+  int is_genome = (*organism_name != '\0');
+  int genome_using_gbrowse = (is_genome && (strcmp(organism_name, "oryza_sativa") == 0 || strcmp(organism_name, "arabidopsis_thaliana") == 0));
 
   size_t output_filepath_length;
   char* temp_output_filepath;
@@ -401,10 +410,29 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
 
   sprintf(temp_output_filepath, "%s.txt", output_filepath);
   tab_out_file = fopen(temp_output_filepath, "w");
+  memset(temp_output_filepath, '\0', output_filepath_length);
+  sprintf(temp_output_filepath, "%s.gff3", output_filepath);
+  gff_out_file = fopen(temp_output_filepath, "w");
+
+  if(is_genome) {
+
+    memset(temp_output_filepath, '\0', output_filepath_length);
+
+    if(genome_using_gbrowse) {
+      sprintf(temp_output_filepath, "%s.gff", output_filepath);
+    } else {
+      sprintf(temp_output_filepath, "%s.bed", output_filepath);
+    }
+
+    genome_browser_file = fopen(temp_output_filepath, "w");
+
+  }
+
 
   free(temp_output_filepath);
 
-  if (!tab_out_file) {
+  if (!gff_out_file || !tab_out_file || (is_genome && !genome_browser_file)) {
+
     fprintf(log_file, "Error: unable to open output file '%s'\n", output_filepath);
 
     // TODO: find a better way to do this
@@ -417,14 +445,31 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
 
   //fprintf(tab_out_file, options_str);
 
-  fprintf(tab_out_file, "TAL1 Best Possible Score:%.2lf\n", best_score);
-  fprintf(tab_out_file, "TAL2 Best Possible Score:%.2lf\n", best_score2);
+
+  // Tab File Header
+  fprintf(tab_out_file, "RVD1 Best Possible Score:%.2lf\n", best_score);
+  fprintf(tab_out_file, "RVD2 Best Possible Score:%.2lf\n", best_score2);
   fprintf(tab_out_file, "Sequence Name\tTAL 1\tTAL 2\tTAL 1 Score\tTAL 2 Score\tTAL 1 Start\tTAL 2 Start\tSpacer Length\tTAL 1 Target\tTAL 2 Target\n");
 
 
+  // GFF file header
+  fprintf(gff_out_file, "##gff-version 3\n");
 
-  for (unsigned long i = 0; i < array_size(results); i++)
-  {
+  fprintf(gff_out_file, "#table_display_tags:tal1,tal2,tal1_target,tal2_target,tal1_score,tal2_score,spacer_length\n");
+
+  fprintf(gff_out_file, "#RVD1 Best Possible Score:%.2lf\n", best_score);
+  fprintf(gff_out_file, "#RVD2 Best Possible Score:%.2lf\n", best_score2);
+
+  // Browser file header
+
+  if(genome_using_gbrowse) {
+    fprintf(genome_browser_file, "##gff-version 3\n");
+  } else if(is_genome) {
+    fprintf(genome_browser_file, "track name=\"TAL Targets\" description=\"Targets for TALEN Pair '%s' '%s'\" visibility=2 useScore=1\n", rvd_string_printable, rvd_string2_printable);
+  }
+
+
+  for (unsigned long i = 0; i < array_size(results); i++) {
 
     BindingSite *site = (BindingSite *) array_get(results, i);
 
@@ -434,11 +479,10 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
     int tal2_seq_len = array_size(rvd_seqs[site->r_idx]) + 2;
     char *tal2_sequence = calloc(tal2_seq_len + 1, sizeof(char));
 
-    sprintf(tal1_name, "TAL%d", site->f_idx + 1);
-    sprintf(tal2_name, "TAL%d", site->r_idx + 1);
+    sprintf(tal1_name, "RVD%d", site->f_idx + 1);
+    sprintf(tal2_name, "RVD%d", site->r_idx + 1);
 
-    for (int j = 0; j < tal2_seq_len; j++)
-    {
+    for (int j = 0; j < tal2_seq_len; j++) {
       char base = site->sequence[1][tal2_seq_len - j - 1];
       if (base == 'A' || base == 'a')
         tal2_sequence[j] = 'T';
@@ -450,8 +494,7 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
         tal2_sequence[j] = 'A';
       else if (base == ' ')
         tal2_sequence[j] = ' ';
-      else
-      {
+      else {
         fprintf(stderr, "Error: unexpected character '%d'\n", base);
 
         // TODO: find a better way to do this
@@ -463,10 +506,36 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
         return 1;
 
       }
+
     }
+
+    unsigned long end_pos = array_size(rvd_seqs[0]) + site->spacer_length + array_size(rvd_seqs[1]);
+    double combined_score = site->scores[0] + site->scores[1];
 
     fprintf( tab_out_file, "%s\t%s\t%s\t%.2lf\t%.2lf\t%lu\t%lu\t%d\t%s\t%s\n",
              site->sequence_name, tal1_name, tal2_name, site->scores[0], site->scores[1], site->indexes[0], site->indexes[1], site->spacer_length, site->sequence[0], tal2_sequence);
+
+    fprintf( gff_out_file, "%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\ttal1=%s;tal2=%s;tal1_target=%s;tal2_target=%s;tal1_score=%.2lf;tal2_score=%.2lf;spacer_length=%d;\n",
+             site->sequence_name, source_str, "TAL_effector_binding_site", site->indexes[0] + 1,
+             end_pos, combined_score, '.', tal1_name, tal2_name, site->sequence[0], tal2_sequence, site->scores[0], site->scores[1], site->spacer_length);
+
+    if(is_genome && i < 10000) {
+
+      if(genome_using_gbrowse) {
+
+        fprintf( genome_browser_file, "chr%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\tName=site%lu;\n",
+                 site->sequence_name, source_str, "TAL_effector_binding_site", site->indexes[0] + 1,
+                 end_pos, combined_score, '.', i);
+
+      } else {
+
+        int bed_score = floorf((combined_best_score / combined_score * 1000) + 0.5);
+        fprintf( genome_browser_file,"%s\t%lu\t%lu\tsite%lu\t%d\t%c\n",
+                 site->sequence_name, site->indexes[0], end_pos - 1, i, bed_score, '+');
+
+      }
+
+    }
 
     free(tal2_sequence);
 
@@ -475,6 +544,10 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
   free(rvd_string_printable);
   free(rvd_string2_printable);
   fclose(tab_out_file);
+  fclose(gff_out_file);
+  if(is_genome) {
+    fclose(genome_browser_file);
+  }
 
   return 0;
 
@@ -595,7 +668,7 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *
   int spacer_max = *((int *) hashmap_get(talesf_kwargs, "spacer_max"));
   
   int count_only = *((int *) hashmap_get(talesf_kwargs, "count_only"));
-  
+
   int **count_results_array = NULL;
   
   if (count_only) {
