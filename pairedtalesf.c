@@ -509,7 +509,7 @@ int print_results(Array *results, Array **rvd_seqs, double best_score, double be
 
     }
 
-    unsigned long end_pos = array_size(rvd_seqs[0]) + site->spacer_length + array_size(rvd_seqs[1]);
+    unsigned long end_pos = site->indexes[0] + array_size(rvd_seqs[0]) + site->spacer_length + array_size(rvd_seqs[1]);
     double combined_score = site->scores[0] + site->scores[1];
 
     fprintf( tab_out_file, "%s\t%s\t%s\t%.2lf\t%.2lf\t%lu\t%lu\t%d\t%s\t%s\n",
@@ -699,7 +699,10 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *
         
         char forward_upstream = seq->seq.s[i-1];
         
-        if ((c_upstream != 0 && (forward_upstream == 'C' || forward_upstream == 'c')) || (c_upstream != 1 && (forward_upstream == 'T' || forward_upstream == 't'))) {
+        int forward_upstream_is_c = (forward_upstream == 'C' || forward_upstream == 'c');
+        int forward_upstream_is_t = (forward_upstream == 'T' || forward_upstream == 't');
+
+        if ((c_upstream != 0 && forward_upstream_is_c) || (c_upstream != 1 && forward_upstream_is_t)) {
           
           double forward_score = score_binding_site(seq, i, forward_rvd_seq, diresidue_scores, forward_lookahead, 0);
           
@@ -713,7 +716,7 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, Array **rvd_seqs, Hashmap *
                
                char reverse_upstream = seq->seq.s[j + 1];
                
-               if ((c_upstream != 0 && (reverse_upstream == 'G' || reverse_upstream == 'g')) || (c_upstream != 1 && (reverse_upstream == 'A' || reverse_upstream == 'a'))) {
+               if ((c_upstream != 0 && (forward_upstream_is_c && (reverse_upstream == 'G' || reverse_upstream == 'g'))) || (c_upstream != 1 && (forward_upstream_is_t && (reverse_upstream == 'A' || reverse_upstream == 'a')))) {
                    
                  double reverse_score = score_binding_site(seq, j - num_reverse_rvds + 1, reverse_rvd_seq, diresidue_scores, reverse_lookahead, 1);
                  
@@ -768,7 +771,7 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   double cutoff = *((double *) hashmap_get(kwargs, "cutoff"));
 
   int numprocs = *((int *) hashmap_get(kwargs, "num_procs"));
-  
+
   int count_only = *((int *) hashmap_get(kwargs, "count_only"));
 
   // Setup the logger
@@ -804,12 +807,12 @@ int run_paired_talesf_task(Hashmap *kwargs) {
 
   Array *rvd_seq = rvd_string_to_array(rvd_string);
   Array *rvd_seq2 = rvd_string_to_array(rvd_string2);
-  
+
   Array *rvd_seqs[2];
-  
+
   rvd_seqs[0] = rvd_seq;
   rvd_seqs[1] = rvd_seq2;
-  
+
   Array *joined_rvd_seq = array_concat(rvd_seq, rvd_seq2);
 
   // Get RVD/bp matching scores
@@ -822,11 +825,11 @@ int run_paired_talesf_task(Hashmap *kwargs) {
 
   double best_score = get_best_score(rvd_seq, diresidue_scores);
   double best_score2 = get_best_score(rvd_seq2, diresidue_scores);
-  
+
   // Define score cutoffs for match sites
 
   double *lookahead_arrays[2];
-  
+
   lookahead_arrays[0] = create_lookahead_array(rvd_seq, cutoff, best_score, diresidue_scores);
   lookahead_arrays[1] = create_lookahead_array(rvd_seq2, cutoff, best_score2, diresidue_scores);
 
@@ -890,11 +893,11 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   if (!abort) {
 
     if (!count_only) {
-      
+
       qsort(results->data, array_size(results), sizeof(BindingSite *), binding_site_compare_pos);
-      
+
       abort = print_results(results, rvd_seqs, best_score, best_score2, log_file);
-    
+
     }
 
     logger(log_file, "Finished");
