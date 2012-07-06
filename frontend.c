@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 #include "talesf.h"
-#include "Hashmap.h"
+#include <bcutils/Hashmap.h>
 
 // Print usage statement
 void print_usage(FILE *out_stream, char *prog_name)
