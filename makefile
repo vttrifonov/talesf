@@ -4,7 +4,7 @@ PROG = pairedtalesf
 all: default
 
 default:
-	gcc -fmax-errors=1 -std=gnu99 -g -O0 -Wall -m64 -o $(LIB) Array.c Hashmap.c pairedtalesf.c -lm -lz -fopenmp -fPIC -shared -rdynamic
+	gcc -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64 -o $(LIB) Array.c Hashmap.c pairedtalesf.c -lm -lz -fopenmp -fPIC -shared -rdynamic
 
 frontend:
 	gcc -fmax-errors=1 -std=gnu99 -g -O0 -Wall -m64 -I /usr/include/pairedtalesf -o $(PROG) frontend.c -lpairedtalesf -fopenmp
