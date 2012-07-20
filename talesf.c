@@ -565,7 +565,7 @@ int run_talesf_task(Hashmap *kwargs) {
 
     }
 
-    array_delete(results);
+    array_delete(results, NULL);
 
   }
 
@@ -579,7 +579,7 @@ int run_talesf_task(Hashmap *kwargs) {
     }
 
 
-    array_delete(rvd_seq);
+    array_delete(rvd_seq, NULL);
 
   }
 
