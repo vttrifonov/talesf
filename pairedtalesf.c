@@ -44,7 +44,7 @@ Hashmap *talesf_kwargs;
 void create_options_string(char *options_str, char *rvd_str) {
 
   char cutoff_str[32];
-  char rvds_eq_str[64];
+  char rvds_eq_str[256];
 
   double cutoff = *((double *) hashmap_get(talesf_kwargs, "cutoff"));
   int forward_only = *((int *) hashmap_get(talesf_kwargs, "forward_only"));
