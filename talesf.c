@@ -41,7 +41,7 @@ typedef struct
 void create_options_string(char *options_str, char *rvd_str, Hashmap *prog_kwargs) {
 
   char cutoff_str[32];
-  char rvds_eq_str[64];
+  char rvds_eq_str[256];
 
   double cutoff = *((double *) hashmap_get(prog_kwargs, "cutoff"));
   int forward_only = *((int *) hashmap_get(prog_kwargs, "forward_only"));
