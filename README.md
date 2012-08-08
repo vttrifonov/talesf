@@ -25,7 +25,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 TALESF is a C library for identifying potential binding sites for transcription
 activator-like (TAL) effectors in a given genomic sequence. Compiling and
 running this program requires a C compiler with OpenMP support (such as GCC 4.2
-or higher). To compile TALESF, enter the following commands in the directory
+or higher). [libbcutils](https://github.com/njbooher/boglab_cutils) must also be installed. To compile TALESF, enter the following commands in the directory
 
 containing this file.
 ```
