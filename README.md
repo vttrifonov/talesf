@@ -33,11 +33,13 @@ containing this file.
   make install
   make frontend
 ```
-To run the program with default options:
+After compiling, you can run the program like this:
 ```
-  ./pairedtalesf -o test_output_file path_to_fasta_input_file "RVD SEQUENCE" "RVD SEQUENCE2"
+  ./pairedtalesf -o output_file genome_seq.txt "HD NI NG NG NI HD NG NN NG NI NI NI NI N* NS N*" "N* NS N* NI NI NI NI NG NN NG HD NI NG NG NI HD"
 ```
-For more information on available options:
+This command will search the genome sequence saved in the file genome_seq.txt for TALEN pair "HD NI NG NG NI HD NG NN NG NI NI NI NI N* NS N*" "N* NS N* NI NI NI NI NG NN NG HD NI NG NG NI HD" and save the output in files called output_file.txt and output_file.gff3. Note that the file genome_seq.txt must be in [FASTA format](http://en.wikipedia.org/wiki/FASTA_format#Format).
+
+For information on available options:
 ```
   ./pairedtalesf -h
 ```
