@@ -22,7 +22,7 @@ See README for license details.
 #include <bcutils/bcutils.h>
 
 // Initialize the kseq library
-#include "kseq.h"
+#include <bcutils/kseq.h>
 KSEQ_INIT(gzFile, gzread)
 
 typedef struct {
