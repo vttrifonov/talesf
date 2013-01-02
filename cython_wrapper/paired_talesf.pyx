@@ -14,8 +14,7 @@ cdef extern from "Hashmap.h":
 cdef extern from "pairedtalesf.h":
     int run_paired_talesf_task(Hashmap *kwargs)
 
-def ScorePairedTalesfTask(char *seqfilename, char *rvd_string, char *rvd_string2, char *output_filepath, char *log_filepath, int c_upstream, double cutoff, int spacer_min, int spacer_max, int numprocs, 
-char *organism_name):
+def ScorePairedTalesfTask(char *seqfilename, char *rvd_string, char *rvd_string2, char *output_filepath, char *log_filepath, int c_upstream, double cutoff, int spacer_min, int spacer_max, int numprocs, char *organism_name):
     
     cdef Hashmap *paired_talesf_kwargs = hashmap_new(32)
     
