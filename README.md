@@ -24,14 +24,22 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 TALESF is a C library for identifying potential binding sites for transcription
 activator-like (TAL) effectors in a given genomic sequence. Compiling and
 running this program requires a C compiler with OpenMP support (such as GCC 4.2
-or higher). [libbcutils](https://github.com/njbooher/boglab_cutils) must also be installed. To compile TALESF, enter the following commands in the directory
+or higher). [libbcutils](https://github.com/njbooher/boglab_cutils) must also be installed. To compile TALESF, enter the following commands in the directory containing this file:
 
-containing this file.
 ```
   make
   make install
   make frontend
 ```
+
+To install the Cython wrapper (only required if you want to use the Python frontend from [boglab_tools](https://github.com/njbooher/boglab_tools)), install [Cython](http://pypi.python.org/pypi/Cython) then run:
+
+```
+  cd cython_wrapper
+  python setup.py build_ext
+  python setup.py install
+```
+
 After compiling, you can run the program like this:
 ```
   ./talesf -o output_file genome_seq.txt "NN HD NI HG HD NG N* HD HD NI NG NG NI HD NG NN NG NI NI NI NI N* NS N*"
