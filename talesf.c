@@ -15,6 +15,7 @@ See README for license details.
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 #include <stdarg.h>
 
 #include <bcutils/Hashmap.h>
@@ -353,6 +354,10 @@ void find_binding_sites(kseq_t *seq, Array *rvdseq, Hashmap *diresidue_scores, d
         strncpy(site->sequence, seq->seq.s + site->index - 1, 1);
         site->sequence[1] = ' ';
         strncpy(site->sequence + 2, seq->seq.s + site->index, num_rvds);
+        for(j = 0; j < num_rvds + 2 + 1; j++) {
+            site->sequence[j] = toupper(site->sequence[j]);
+        }
+        
         strncpy(site->sequence_name, seq->name.s, seq_name_len);
 
         site->score = cumscore;
@@ -404,6 +409,10 @@ void find_binding_sites(kseq_t *seq, Array *rvdseq, Hashmap *diresidue_scores, d
           strncpy(site->sequence, seq->seq.s + site->index, num_rvds);
           site->sequence[num_rvds] = ' ';
           strncpy(site->sequence + num_rvds + 1, seq->seq.s + site->index + num_rvds, 1);
+          for(j = 0; j < num_rvds + 2 + 1; j++) {
+            site->sequence[j] = toupper(site->sequence[j]);
+          }
+          
           strncpy(site->sequence_name, seq->name.s, seq_name_len);
 
           site->score = cumscore;
