@@ -15,6 +15,7 @@ See README for license details.
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 #include <stdarg.h>
 
 #include <bcutils/Hashmap.h>
@@ -446,6 +447,10 @@ BindingSite *create_binding_site(kseq_t *seq, unsigned long i, unsigned long j, 
   // Upstream
   site->sequence[0][1] = ' ';
   strncpy(site->sequence[0] + 2, seq->seq.s + i, num_forward_rvds);
+  
+  for(int k = 0; k < num_forward_rvds + 2 + 1; k++) {
+    site->sequence[0][k] = toupper(site->sequence[0][k]);
+  }
 
   site->scores[0] = forward_score;
 
@@ -461,7 +466,11 @@ BindingSite *create_binding_site(kseq_t *seq, unsigned long i, unsigned long j, 
   // Upstream
   site->sequence[1][num_reverse_rvds] = ' ';
   strncpy(site->sequence[1] + num_reverse_rvds + 1, seq->seq.s + j + 1, 1);
-
+  
+  for(int k = 0; k < num_reverse_rvds + 2 + 1; k++) {
+    site->sequence[1][k] = toupper(site->sequence[1][k]);
+  }
+  
   site->scores[1] = reverse_score;
 
   return site;
