@@ -42,9 +42,9 @@ To install the Cython wrapper (only required if you want to use the Python front
 
 After compiling, you can run the program like this:
 ```
-  ./talesf -o output_file genome_seq.txt "NN HD NI HG HD NG N* HD HD NI NG NG NI HD NG NN NG NI NI NI NI N* NS N*"
+  ./talesf -o output_file genome_seq.fasta "NN HD NI HG HD NG N* HD HD NI NG NG NI HD NG NN NG NI NI NI NI N* NS N*"
 ```
-This command will search the genome sequence saved in the file genome_seq.txt for RVD sequence "NN HD NI HG HD NG N* HD HD NI NG NG NI HD NG NN NG NI NI NI NI N* NS N*" and save the output in files called output_file.txt and output_file.gff3. Note that the file genome_seq.txt must be in [FASTA format](http://en.wikipedia.org/wiki/FASTA_format#Format).
+This command will search the genome sequence saved in the file genome_seq.fasta for RVD sequence "NN HD NI HG HD NG N* HD HD NI NG NG NI HD NG NN NG NI NI NI NI N* NS N*" and save the output in files called output_file.txt and output_file.gff3. Note that the file genome_seq.fasta must be in [FASTA format](http://en.wikipedia.org/wiki/FASTA_format#Format).
 
 For information on available options:
 ```
