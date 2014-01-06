@@ -156,6 +156,27 @@ int main(int argc, char **argv)
 
   Hashmap *talesf_kwargs = hashmap_new(32);
 
+  Array *rvd_seq = rvd_string_to_array(rvd_string);
+  Array *rvd_seq2 = rvd_string_to_array(rvd_string2);
+
+  Array *rvd_seqs[2];
+
+  rvd_seqs[0] = rvd_seq;
+  rvd_seqs[1] = rvd_seq2;
+
+  Array *joined_rvd_seq = array_concat(rvd_seq, rvd_seq2);
+
+  // Get RVD/bp matching scores
+
+  Hashmap *diresidue_probabilities = get_diresidue_probabilities(joined_rvd_seq, weight);
+  Hashmap *diresidue_scores = convert_probabilities_to_scores(diresidue_probabilities);
+  hashmap_delete(diresidue_probabilities, NULL);
+
+  // Compute optimal score for the RVD sequences
+
+  double best_score = get_best_score(rvd_seq, diresidue_scores);
+  double best_score2 = get_best_score(rvd_seq2, diresidue_scores);
+
   hashmap_add(talesf_kwargs, "seq_filename", seq_filepath);
   hashmap_add(talesf_kwargs, "rvd_string", rvd_string);
   hashmap_add(talesf_kwargs, "rvd_string2", rvd_string2);
@@ -175,6 +196,22 @@ int main(int argc, char **argv)
   int task_result = run_paired_talesf_task(talesf_kwargs);
 
   hashmap_delete(talesf_kwargs, NULL);
+
+  if (rvd_seq) {
+    array_delete(rvd_seq, free);
+  }
+
+  if (rvd_seq2) {
+    array_delete(rvd_seq2, free);
+  }
+
+  if (joined_rvd_seq) {
+    array_delete(joined_rvd_seq, NULL);
+  }
+
+  if (diresidue_scores) {
+    hashmap_delete(diresidue_scores, free);
+  }
 
   return task_result;
 
