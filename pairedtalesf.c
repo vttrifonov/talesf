@@ -48,14 +48,9 @@ void create_options_string(char *options_str, char *rvd_str) {
   char rvds_eq_str[256];
 
   double cutoff = *((double *) hashmap_get(talesf_kwargs, "cutoff"));
-  int forward_only = *((int *) hashmap_get(talesf_kwargs, "forward_only"));
   int c_upstream = *((int *) hashmap_get(talesf_kwargs, "c_upstream"));
 
   strcat(options_str, "options_used:");
-
-  if (!forward_only) {
-    strcat(options_str, "search reverse complement, ");
-  }
 
   strcat(options_str, "upstream_base = ");
 
