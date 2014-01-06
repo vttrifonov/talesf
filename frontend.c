@@ -5,6 +5,10 @@
 #include "pairedtalesf.h"
 
 #include <bcutils/Hashmap.h>
+#include <bcutils/Array.h>
+#include <bcutils/bcutils.h>
+
+#define BIGGEST_RVD_SCORE_EVER 100
 
 // Print usage statement
 void print_usage(FILE *out_stream, char *prog_name)
@@ -156,38 +160,75 @@ int main(int argc, char **argv)
 
   Hashmap *talesf_kwargs = hashmap_new(32);
 
-  Array *rvd_seq = rvd_string_to_array(rvd_string);
-  Array *rvd_seq2 = rvd_string_to_array(rvd_string2);
+  Array *rvd_array = rvd_string_to_array(rvd_string);
+  Array *rvd_array2 = rvd_string_to_array(rvd_string2);
 
-  Array *rvd_seqs[2];
-
-  rvd_seqs[0] = rvd_seq;
-  rvd_seqs[1] = rvd_seq2;
-
-  Array *joined_rvd_seq = array_concat(rvd_seq, rvd_seq2);
+  Array *joined_rvd_array = array_concat(rvd_array, rvd_array2);
 
   // Get RVD/bp matching scores
 
-  Hashmap *diresidue_probabilities = get_diresidue_probabilities(joined_rvd_seq, weight);
+  Hashmap *diresidue_probabilities = get_diresidue_probabilities(joined_rvd_array, weight);
   Hashmap *diresidue_scores = convert_probabilities_to_scores(diresidue_probabilities);
   hashmap_delete(diresidue_probabilities, NULL);
-
-  // Compute optimal score for the RVD sequences
-
-  double best_score = get_best_score(rvd_seq, diresidue_scores);
-  double best_score2 = get_best_score(rvd_seq2, diresidue_scores);
-
+  
+  // Convert hashmap to int map
+  
+  hashmap_add(diresidue_scores, "XX", double_array(0, 0, 0, 0, BIGGEST_RVD_SCORE_EVER));
+  
+  double **scoring_matrix = calloc(hashmap_size(diresidue_scores), sizeof(double*));
+  
+  Hashmap *rvd_to_int = hashmap_new(hashmap_size(diresidue_scores));
+  unsigned int *rvd_ints = calloc(hashmap_size(diresidue_scores), sizeof(unsigned int));
+  
+  char **diresidues = hashmap_keys(diresidue_scores);
+  
+  for (unsigned int i = 0; i < hashmap_size(diresidue_scores); i++) {
+  
+    rvd_ints[i] = i;
+    hashmap_add(rvd_to_int, diresidues[i], rvd_ints + i);
+  
+    scoring_matrix[i] = hashmap_get(diresidue_scores, diresidues[i]);
+    scoring_matrix[i][4] = BIGGEST_RVD_SCORE_EVER;
+  
+  }
+  
+  // Convert RVD seqs to int seqs
+  unsigned int *rvd_seqs[2];
+  rvd_seqs[0] = (unsigned int*) calloc(array_size(rvd_array), sizeof(unsigned int));
+  rvd_seqs[1] = (unsigned int*) calloc(array_size(rvd_array2), sizeof(unsigned int));
+  
+  for (unsigned int i = 0; i < array_size(rvd_array); i++) {
+    rvd_seqs[0][i] = *(unsigned int *)(hashmap_get(rvd_to_int, array_get(rvd_array, i)));
+  }
+  
+  for (unsigned int i = 0; i < array_size(rvd_array2); i++) {
+    rvd_seqs[1][i] = *(unsigned int *)(hashmap_get(rvd_to_int, array_get(rvd_array2, i)));
+  }
+  
+  unsigned int rvd_seqs_lens[2];
+  rvd_seqs_lens[0] = array_size(rvd_array);
+  rvd_seqs_lens[1] = array_size(rvd_array2);
+  
+  // Compute optimal scores for the RVD sequences
+  double best_scores[2];
+  best_scores[0] = get_best_score(rvd_array, diresidue_scores);
+  best_scores[1] = get_best_score(rvd_array2, diresidue_scores);
+  
   hashmap_add(talesf_kwargs, "seq_filename", seq_filepath);
+  hashmap_add(talesf_kwargs, "rvd_seqs", rvd_seqs);
+  hashmap_add(talesf_kwargs, "rvd_seqs_lens", rvd_seqs_lens);
   hashmap_add(talesf_kwargs, "rvd_string", rvd_string);
   hashmap_add(talesf_kwargs, "rvd_string2", rvd_string2);
+  hashmap_add(talesf_kwargs, "best_scores", best_scores);
+  hashmap_add(talesf_kwargs, "scoring_matrix", scoring_matrix);
   hashmap_add(talesf_kwargs, "output_filepath", out_filepath);
   hashmap_add(talesf_kwargs, "log_filepath", log_filepath);
   hashmap_add(talesf_kwargs, "weight", &weight);
   hashmap_add(talesf_kwargs, "cutoff", &cutoff);
   hashmap_add(talesf_kwargs, "c_upstream", &c_upstream);
-  hashmap_add(talesf_kwargs, "num_procs", &num_procs);
   hashmap_add(talesf_kwargs, "spacer_min", &min);
   hashmap_add(talesf_kwargs, "spacer_max", &max);
+  hashmap_add(talesf_kwargs, "num_procs", &num_procs);
   hashmap_add(talesf_kwargs, "organism_name", "");
   
   int count_only = 0;
@@ -196,17 +237,41 @@ int main(int argc, char **argv)
   int task_result = run_paired_talesf_task(talesf_kwargs);
 
   hashmap_delete(talesf_kwargs, NULL);
-
-  if (rvd_seq) {
-    array_delete(rvd_seq, free);
+  
+  if (rvd_seqs[0]) {
+    free(rvd_seqs[0]);
+  }
+  
+  if (rvd_seqs[1]) {
+    free(rvd_seqs[1]);
+  }
+  
+  if (scoring_matrix) {
+    free(scoring_matrix);
+  }
+  
+  if (rvd_to_int) {
+    hashmap_delete(rvd_to_int, NULL);
+  }
+  
+  if (rvd_ints) {
+    free(rvd_ints);
+  }
+  
+  if (diresidues) {
+    free(diresidues);
+  }
+  
+  if (rvd_array) {
+    array_delete(rvd_array, free);
   }
 
-  if (rvd_seq2) {
-    array_delete(rvd_seq2, free);
+  if (rvd_array2) {
+    array_delete(rvd_array2, free);
   }
 
-  if (joined_rvd_seq) {
-    array_delete(joined_rvd_seq, NULL);
+  if (joined_rvd_array) {
+    array_delete(joined_rvd_array, NULL);
   }
 
   if (diresidue_scores) {
