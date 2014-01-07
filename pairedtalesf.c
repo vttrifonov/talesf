@@ -205,12 +205,30 @@ int print_results(Array *results, FILE *log_file) {
 
   size_t output_filepath_length;
   char* temp_output_filepath;
-
+  
+  char *pos;
+  
   char *rvd_string_printable = strdup(hashmap_get(talesf_kwargs, "rvd_string"));
-  str_replace(rvd_string_printable, " ", "_");
+  
+  pos = strstr(rvd_string_printable, " ");
 
+  while (pos != NULL) {
+
+    strncpy(pos, "_", 1);
+    pos = strstr(rvd_string_printable, " ");
+
+  }
+  
   char *rvd_string2_printable = strdup(hashmap_get(talesf_kwargs, "rvd_string2"));
-  str_replace(rvd_string2_printable, " ", "_");
+  
+  pos = strstr(rvd_string2_printable, " ");
+
+  while (pos != NULL) {
+
+    strncpy(pos, "_", 1);
+    pos = strstr(rvd_string2_printable, " ");
+
+  }
 
   //create_options_string(options_str, rvd_str);
 
