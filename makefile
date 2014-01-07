@@ -2,10 +2,10 @@ LIB = libtalesf.so
 PROG = talesf
 
 default:
-	gcc -g -O3 -Wall -m64 -o $(LIB) talesf.c -lbcutils -lm -lz -fopenmp -fPIC -shared -rdynamic
+	gcc -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64 -o $(LIB) talesf.c -lbcutils -lm -lz -fopenmp -fPIC -shared -rdynamic
 
 frontend:
-	gcc -g -O3 -Wall -m64 -I /usr/include/talesf -o $(PROG) frontend.c -lbcutils -ltalesf
+	gcc -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64 -I /usr/include/talesf -o $(PROG) frontend.c -lbcutils -ltalesf -fopenmp
 
 clean:
 	rm -f *.o *~ $(LIB)

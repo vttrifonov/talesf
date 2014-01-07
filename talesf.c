@@ -35,18 +35,20 @@ typedef struct
   double score;
 } BindingSite;
 
+Hashmap *talesf_kwargs;
+
 /*
  * Utility
  */
 
-void create_options_string(char *options_str, char *rvd_str, Hashmap *prog_kwargs) {
+void create_options_string(char *options_str, char *rvd_str) {
 
   char cutoff_str[32];
   char rvds_eq_str[256];
 
-  double cutoff = *((double *) hashmap_get(prog_kwargs, "cutoff"));
-  int forward_only = *((int *) hashmap_get(prog_kwargs, "forward_only"));
-  int c_upstream = *((int *) hashmap_get(prog_kwargs, "c_upstream"));
+  double cutoff = *((double *) hashmap_get(talesf_kwargs, "cutoff"));
+  int forward_only = *((int *) hashmap_get(talesf_kwargs, "forward_only"));
+  int c_upstream = *((int *) hashmap_get(talesf_kwargs, "c_upstream"));
 
   strcat(options_str, "options_used:");
 
@@ -74,6 +76,32 @@ void create_options_string(char *options_str, char *rvd_str, Hashmap *prog_kwarg
 
 }
 
+double *create_lookahead_array(unsigned int *rvd_seq, unsigned int rvd_seq_len, double cutoff, double best_score, double **scoring_matrix) {
+  
+  double *lookahead_array = calloc(rvd_seq_len, sizeof(double));
+  
+  lookahead_array[rvd_seq_len - 1] = cutoff * best_score;
+  
+  for (int i = rvd_seq_len - 2; i >= 0; i--) {
+    
+    double *scores = scoring_matrix[rvd_seq[i+1]];
+    
+    double min = scores[0];
+    
+    for (int j = 0; j < 4; j++) {
+      if (scores[j] < min) {
+        min = scores[j];
+      }
+    }
+    
+    lookahead_array[i] = lookahead_array[i + 1] - (min);
+      
+  }
+  
+  return lookahead_array;
+
+}
+
 /*
  * Core
  */
@@ -98,87 +126,82 @@ int binding_site_compare_score(const void * a, const void * b)
 
 }
 
-int print_results(Array *results, Array *rvd_seq, Hashmap *prog_kwargs, double best_score, char *output_filepath, FILE *log_file) {
-
-  int forward_only = *((int *) hashmap_get(prog_kwargs, "forward_only"));
-  char *organism_name = hashmap_get(prog_kwargs, "organism_name");
-
+int print_results(Array *results, FILE *log_file) {
+  
+  char *output_filepath = hashmap_get(talesf_kwargs, "output_filepath");
+  char *organism_name = hashmap_get(talesf_kwargs, "organism_name");
+  unsigned int num_rvds = *((unsigned int *) hashmap_get(talesf_kwargs, "rvd_seq_len"));
+  double best_score = *((double *) hashmap_get(talesf_kwargs, "best_score"));
+  int forward_only = *((int *) hashmap_get(talesf_kwargs, "forward_only"));
+  
   char *source_str = "TALESF";
   char options_str[512];
-
+  
+  // strcat doesn't seem to work unless you do this
   *options_str = '\0';
 
-  int num_rvds = array_size(rvd_seq);
   char *plus_strand_sequence;
   FILE *gff_out_file = NULL;
   FILE *tab_out_file = NULL;
   FILE *genome_browser_file = NULL;
 
-  size_t output_filepath_length;
-  char* temp_output_filepath;
-
-  char *rvd_str = calloc(3 * num_rvds, sizeof(char));
-
   int is_genome = (*organism_name != '\0');
   int genome_using_gbrowse = (is_genome && (strcmp(organism_name, "oryza_sativa") == 0 || strcmp(organism_name, "arabidopsis_thaliana") == 0));
+  
+  size_t output_filepath_length;
+  char* temp_output_filepath;
+  
+  char *rvd_string_printable = strdup(hashmap_get(talesf_kwargs, "rvd_string"));
+  
+  char *pos = strstr(rvd_string_printable, " ");
+  
+  while (pos != NULL) {
 
-  int i;
+    strncpy(pos, "_", 1);
+    pos = strstr(rvd_string_printable, " ");
 
-  for(i = 0; i < num_rvds; i++)
-  {
-    char *rvd = array_get(rvd_seq, i);
-    if(i == 0)
-      strncpy(rvd_str, rvd, 2);
-    else
-      sprintf(rvd_str + (i*3)-1, "_%s", rvd);
   }
-  rvd_str[3*num_rvds - 1] = '\0';
 
-  create_options_string(options_str, rvd_str, prog_kwargs);
+  create_options_string(options_str, rvd_string_printable);
 
-  if(output_filepath == NULL) {
-
-    gff_out_file = stdout;
-
-  } else {
-
-
-    output_filepath_length = strlen(output_filepath) + 5;
-    temp_output_filepath = calloc(output_filepath_length + 1, sizeof(char));
-
-    sprintf(temp_output_filepath, "%s.txt", output_filepath);
-    tab_out_file = fopen(temp_output_filepath, "w");
+  output_filepath_length = strlen(output_filepath) + 5;
+  temp_output_filepath = calloc(output_filepath_length + 1, sizeof(char));
+  
+  sprintf(temp_output_filepath, "%s.txt", output_filepath);
+  tab_out_file = fopen(temp_output_filepath, "w");
+  memset(temp_output_filepath, '\0', output_filepath_length);
+  sprintf(temp_output_filepath, "%s.gff3", output_filepath);
+  gff_out_file = fopen(temp_output_filepath, "w");
+  
+  if(is_genome) {
+    
     memset(temp_output_filepath, '\0', output_filepath_length);
-    sprintf(temp_output_filepath, "%s.gff3", output_filepath);
-    gff_out_file = fopen(temp_output_filepath, "w");
-
-    if(is_genome) {
-      memset(temp_output_filepath, '\0', output_filepath_length);
-
-      if(genome_using_gbrowse) {
-        sprintf(temp_output_filepath, "%s.gff", output_filepath);
-      } else {
-        sprintf(temp_output_filepath, "%s.bed", output_filepath);
-      }
-
-      genome_browser_file = fopen(temp_output_filepath, "w");
-
-
+    
+    if(genome_using_gbrowse) {
+      sprintf(temp_output_filepath, "%s.gff", output_filepath);
+    } else {
+      sprintf(temp_output_filepath, "%s.bed", output_filepath);
     }
-
-    free(temp_output_filepath);
-
+    
+    genome_browser_file = fopen(temp_output_filepath, "w");
+    
+    
   }
+  
+  free(temp_output_filepath);
 
-  if(!gff_out_file || !tab_out_file || (is_genome && !genome_browser_file))
-  {
+  if(!gff_out_file || !tab_out_file || (is_genome && !genome_browser_file)) {
+    
     fprintf(log_file, "Error: unable to open output file '%s'\n", output_filepath);
+    
+    free(rvd_string_printable);
+    
     return 1;
+    
   }
 
   // Tab file header
-  if (forward_only)
-  {
+  if (forward_only) {
     fprintf(tab_out_file, "table_ignores:Plus strand sequence\n");
   }
 
@@ -190,12 +213,9 @@ int print_results(Array *results, Array *rvd_seq, Hashmap *prog_kwargs, double b
   // GFF file header
   fprintf(gff_out_file, "##gff-version 3\n");
 
-  if (forward_only)
-  {
+  if (forward_only) {
     fprintf(gff_out_file, "#table_display_tags:target_sequence\n");
-  }
-  else
-  {
+  } else {
     fprintf(gff_out_file, "#table_display_tags:target_sequence,plus_strand_sequence\n");
   }
 
@@ -209,11 +229,10 @@ int print_results(Array *results, Array *rvd_seq, Hashmap *prog_kwargs, double b
     fprintf(genome_browser_file, "##gff-version 3\n");
   }
   else if(is_genome) {
-    fprintf(genome_browser_file, "track name=\"TAL Targets\" description=\"Targets for RVD sequence %s\" visibility=2 useScore=1\n", rvd_str);
+    fprintf(genome_browser_file, "track name=\"TAL Targets\" description=\"Targets for RVD sequence %s\" visibility=2 useScore=1\n", rvd_string_printable);
   }
 
-  for(i = 0; i < array_size(results); i++)
-  {
+  for(int i = 0; i < array_size(results); i++) {
 
     BindingSite *site = (BindingSite *)array_get(results, i);
     char *sequence = site->sequence;
@@ -222,19 +241,18 @@ int print_results(Array *results, Array *rvd_seq, Hashmap *prog_kwargs, double b
 
     if(site->strand > 0)
       plus_strand_sequence = sequence;
-    else
-    {
-      int j;
+    else {
+      
       int seq_len = num_rvds + 2;
-
 
       plus_strand_sequence = sequence;
       sequence = malloc(sizeof(char)*(seq_len+1));
       sequence[seq_len] = '\0';
 
-      for(j = 0; j < seq_len; j++)
-      {
+      for(int j = 0; j < seq_len; j++) {
+        
         char base = site->sequence[seq_len - j - 1];
+        
         if(base == 'A' || base == 'a')
           sequence[j] = 'T';
         else if(base == 'C' || base == 'c')
@@ -245,14 +263,16 @@ int print_results(Array *results, Array *rvd_seq, Hashmap *prog_kwargs, double b
           sequence[j] = 'A';
         else if(base == ' ')
           sequence[j] = ' ';
-        else
-        {
+        else {
           fprintf(stderr, "Error: unexpected character '%c'\n", base);
           exit(1);
         }
+        
       }
+      
       strand = '-';
       tab_strand = "Minus";
+      
     }
 
     fprintf( tab_out_file, "%s\t%s\t%.2lf\t%lu\t%s\t%s\n",
@@ -260,7 +280,7 @@ int print_results(Array *results, Array *rvd_seq, Hashmap *prog_kwargs, double b
 
     fprintf( gff_out_file, "%s\t%s\t%s\t%lu\t%lu\t%.2lf\t%c\t.\trvd_sequence=%s;target_sequence=%s;plus_strand_sequence=%s;\n",
              site->sequence_name, source_str, "TAL_effector_binding_site", site->index + 1,
-             site->index + num_rvds, site->score, strand, rvd_str, sequence, plus_strand_sequence);
+             site->index + num_rvds, site->score, strand, rvd_string_printable, sequence, plus_strand_sequence);
 
     if(is_genome && i < 10000) {
 
@@ -286,7 +306,7 @@ int print_results(Array *results, Array *rvd_seq, Hashmap *prog_kwargs, double b
 
   }
 
-  free(rvd_str);
+  free(rvd_string_printable);
   fclose(gff_out_file);
   fclose(tab_out_file);
 
@@ -299,47 +319,51 @@ int print_results(Array *results, Array *rvd_seq, Hashmap *prog_kwargs, double b
 }
 
 // Identify and print out TAL effector binding sites
-void find_binding_sites(kseq_t *seq, Array *rvdseq, Hashmap *diresidue_scores, double cutoff, int forwardonly, int c_upstream, Array *results)
-{
-  unsigned long i, j;
-  int num_rvds = array_size(rvdseq);
-  int seq_name_len;
-
-  if(num_rvds > seq->seq.l)
-  {
-    fprintf(stderr, "Warning: skipping sequence '%s' since it is shorter than the RVD sequence\n", seq->seq.s);
+void find_binding_sites(FILE *log_file, kseq_t *seq, double *lookahead_array, Array *results) {
+  
+  int c_upstream = *((int *) hashmap_get(talesf_kwargs, "c_upstream"));
+  int forward_only = *((int *) hashmap_get(talesf_kwargs, "forward_only"));
+  
+  unsigned int *rvd_seq = hashmap_get(talesf_kwargs, "rvd_seq");
+  unsigned int num_rvds = *((unsigned int *) hashmap_get(talesf_kwargs, "rvd_seq_len"));
+  double **scoring_matrix = hashmap_get(talesf_kwargs, "scoring_matrix");
+  
+  if(num_rvds > seq->seq.l) {
+    logger(log_file, "Warning: skipping sequence '%s' since it is shorter than the RVD sequence\n", seq->seq.s);
     return;
   }
 
-  seq_name_len = strlen(seq->name.s);
+  int seq_name_len = strlen(seq->name.s);
 
-  for(i = 1; i <= seq->seq.l - num_rvds; i++)
-  {
-    if((c_upstream != 0 && (seq->seq.s[i-1] == 'C' || seq->seq.s[i-1] == 'c')) || (c_upstream != 1 && (seq->seq.s[i-1] == 'T' || seq->seq.s[i-1] == 't')))
-    {
-      double cumscore = 0.0;
-      for(j = 0; j < num_rvds; j++)
-      {
-        char *rvd = array_get(rvdseq, j);
-        double *scores = hashmap_get(diresidue_scores, rvd);
+  for(unsigned long i = 1; i <= seq->seq.l - num_rvds; i++) {
+    
+    if((c_upstream != 0 && (seq->seq.s[i-1] == 'C' || seq->seq.s[i-1] == 'c')) || (c_upstream != 1 && (seq->seq.s[i-1] == 'T' || seq->seq.s[i-1] == 't'))) {
+      
+      double total_score = 0.0;
+      
+      for(int j = 0; j < num_rvds; j++) {
+        
+        double *scores = scoring_matrix[rvd_seq[j]];
 
         if(seq->seq.s[i+j] == 'A' || seq->seq.s[i+j] == 'a')
-          cumscore += scores[0];
+          total_score += scores[0];
         else if(seq->seq.s[i+j] == 'C' || seq->seq.s[i+j] == 'c')
-          cumscore += scores[1];
+          total_score += scores[1];
         else if(seq->seq.s[i+j] == 'G' || seq->seq.s[i+j] == 'g')
-          cumscore += scores[2];
+          total_score += scores[2];
         else if(seq->seq.s[i+j] == 'T' || seq->seq.s[i+j] == 't')
-          cumscore += scores[3];
+          total_score += scores[3];
         else
-          cumscore += cutoff + 1;
+          total_score += lookahead_array[num_rvds - 1] + 1;
 
-        if(cumscore > cutoff)
+        if(total_score > lookahead_array[j]) {
+          total_score = -1;
           break;
+        }
+        
       }
 
-      if(cumscore <= cutoff)
-      {
+      if(total_score != -1) {
 
         BindingSite *site = malloc(sizeof(BindingSite));
 
@@ -354,13 +378,14 @@ void find_binding_sites(kseq_t *seq, Array *rvdseq, Hashmap *diresidue_scores, d
         strncpy(site->sequence, seq->seq.s + site->index - 1, 1);
         site->sequence[1] = ' ';
         strncpy(site->sequence + 2, seq->seq.s + site->index, num_rvds);
-        for(j = 0; j < num_rvds + 2 + 1; j++) {
+        
+        for(int j = 0; j < num_rvds + 2 + 1; j++) {
             site->sequence[j] = toupper(site->sequence[j]);
         }
         
         strncpy(site->sequence_name, seq->name.s, seq_name_len);
 
-        site->score = cumscore;
+        site->score = total_score;
 
         #pragma omp critical (add_result)
         array_add(results, site);
@@ -368,33 +393,37 @@ void find_binding_sites(kseq_t *seq, Array *rvdseq, Hashmap *diresidue_scores, d
       }
     }
 
-    if(!forwardonly)
-    {
-      if((c_upstream != 0 && (seq->seq.s[i + num_rvds - 1] == 'G' || seq->seq.s[i + num_rvds - 1] == 'g')) || (c_upstream != 1 && (seq->seq.s[i + num_rvds - 1] == 'A' || seq->seq.s[i + num_rvds - 1] == 'a')))
-      {
-        double cumscore = 0.0;
-        for(j = 0; j < num_rvds; j++)
-        {
-          char *rvd = array_get(rvdseq, num_rvds - j - 1);
-          double *scores = hashmap_get(diresidue_scores, rvd);
+    if(!forward_only) {
+      
+      if((c_upstream != 0 && (seq->seq.s[i + num_rvds - 1] == 'G' || seq->seq.s[i + num_rvds - 1] == 'g')) || (c_upstream != 1 && (seq->seq.s[i + num_rvds - 1] == 'A' || seq->seq.s[i + num_rvds - 1] == 'a'))) {
+        
+        double total_score = 0.0;
+        
+        for(int j = 0; j < num_rvds; j++) {
+          
+          double *scores = scoring_matrix[rvd_seq[j]];
+          
+          unsigned long k = i + num_rvds - j - 2;
 
-          if(seq->seq.s[i+j-1] == 'A' || seq->seq.s[i+j-1] == 'a')
-            cumscore += scores[3];
-          else if(seq->seq.s[i+j-1] == 'C' || seq->seq.s[i+j-1] == 'c')
-            cumscore += scores[2];
-          else if(seq->seq.s[i+j-1] == 'G' || seq->seq.s[i+j-1] == 'g')
-            cumscore += scores[1];
-          else if(seq->seq.s[i+j-1] == 'T' || seq->seq.s[i+j-1] == 't')
-            cumscore += scores[0];
+          if(seq->seq.s[k] == 'A' || seq->seq.s[k] == 'a')
+            total_score += scores[3];
+          else if(seq->seq.s[k] == 'C' || seq->seq.s[k] == 'c')
+            total_score += scores[2];
+          else if(seq->seq.s[k] == 'G' || seq->seq.s[k] == 'g')
+            total_score += scores[1];
+          else if(seq->seq.s[k] == 'T' || seq->seq.s[k] == 't')
+            total_score += scores[0];
           else
-            cumscore += cutoff + 1;
+            total_score += lookahead_array[num_rvds - 1] + 1;
 
-          if(cumscore > cutoff)
+          if(total_score > lookahead_array[j]) {
+            total_score = -1;
             break;
+          }
+          
         }
 
-        if(cumscore <= cutoff)
-        {
+        if(total_score != -1) {
 
           BindingSite *site = malloc(sizeof(BindingSite));
 
@@ -409,13 +438,14 @@ void find_binding_sites(kseq_t *seq, Array *rvdseq, Hashmap *diresidue_scores, d
           strncpy(site->sequence, seq->seq.s + site->index, num_rvds);
           site->sequence[num_rvds] = ' ';
           strncpy(site->sequence + num_rvds + 1, seq->seq.s + site->index + num_rvds, 1);
-          for(j = 0; j < num_rvds + 2 + 1; j++) {
+          
+          for(int j = 0; j < num_rvds + 2 + 1; j++) {
             site->sequence[j] = toupper(site->sequence[j]);
           }
           
           strncpy(site->sequence_name, seq->name.s, seq_name_len);
 
-          site->score = cumscore;
+          site->score = total_score;
 
           #pragma omp critical (add_result)
           array_add(results, site);
@@ -428,75 +458,56 @@ void find_binding_sites(kseq_t *seq, Array *rvdseq, Hashmap *diresidue_scores, d
 }
 
 int run_talesf_task(Hashmap *kwargs) {
-
+  
+  talesf_kwargs = kwargs;
+  
   // Options
   char *seq_filename = hashmap_get(kwargs, "seq_filename");
-  char *rvd_string = hashmap_get(kwargs, "rvd_string");
-  char *output_filepath = hashmap_get(kwargs, "output_filepath");
   char *log_filepath = hashmap_get(kwargs, "log_filepath");
-
-  double weight = *((double *) hashmap_get(kwargs, "weight"));
+  unsigned int *rvd_seq = hashmap_get(kwargs, "rvd_seq");
+  unsigned int rvd_seq_len = *((unsigned int *) hashmap_get(kwargs, "rvd_seq_len"));
+  double best_score = *((double *) hashmap_get(kwargs, "best_score"));
   double cutoff = *((double *) hashmap_get(kwargs, "cutoff"));
-
-  int forward_only = *((int *) hashmap_get(kwargs, "forward_only"));
-  int c_upstream = *((int *) hashmap_get(kwargs, "c_upstream"));
   int numprocs = *((int *) hashmap_get(kwargs, "num_procs"));
+  double **scoring_matrix = hashmap_get(kwargs, "scoring_matrix");
 
   // Program variable domain
-  Array *rvd_seq;
-  char *tok, cmd[256], line[32];
-  gzFile seqfile;
-  kseq_t *seq;
-  int i, j, seq_num;
+  int seq_num;
+  char cmd[256], line[32];
 
   FILE *log_file = stdout;
 
   if(log_filepath && strcmp(log_filepath, "NA") != 0) {
     log_file = fopen(log_filepath, "a");
   }
-
-  if(!seq_filename || !rvd_string || !output_filepath) {
-    logger(log_file, "Error: One or more arguments to run_talesf_task was null");
-    return 1;
-  }
-
-  Array *results = array_new( sizeof(BindingSite *) );
-
-  rvd_seq = array_new( sizeof(char *) );
-  tok = strtok(rvd_string, " _");
-  while(tok != NULL)
-  {
-    char *r = strdup(tok);
-    array_add(rvd_seq, r);
-    tok = strtok(NULL, " _");
-  }
-
-  // Get RVD/bp matching scores
-  Hashmap *diresidue_probabilities = get_diresidue_probabilities(rvd_seq, weight);
-  Hashmap *diresidue_scores = convert_probabilities_to_scores(diresidue_probabilities);
-  hashmap_delete(diresidue_probabilities, NULL);
-
-  // Compute optimal score for this RVD sequence
-  double best_score = get_best_score(rvd_seq, diresidue_scores);
-
+  
   // Determine number of sequences in file
   sprintf(cmd, "grep '^>' %s | wc -l", seq_filename);
-  FILE *in = popen(cmd, "r");
-  if(!in)
-  {
+  FILE *fasta_filesize_in = popen(cmd, "r");
+  if(!fasta_filesize_in) {
     perror("Error: unable to check fasta file size\n");
     logger(log_file, "Error: unable to check fasta file size");
     return 1;
   }
-  fgets(line, sizeof(line), in);
-  pclose(in);
+  fgets(line, sizeof(line), fasta_filesize_in);
+  pclose(fasta_filesize_in);
   seq_num = atoi(line);
-
+  
+  Array *results = array_new( sizeof(BindingSite *) );
+  
+  // Define score cutoffs for match sites
+  
+  double *lookahead_array = create_lookahead_array(rvd_seq, rvd_seq_len, cutoff, best_score, scoring_matrix);
+  
   // Begin processing
 
   int abort = 0;
+  int i, j;
+  gzFile seqfile;
+  kseq_t *seq;
 
   omp_set_num_threads(numprocs);
+  
   #pragma omp parallel private(i, j, seq, seqfile)
   {
 
@@ -531,7 +542,7 @@ int run_talesf_task(Hashmap *kwargs) {
           }
 
           logger(log_file, "Scanning %s for binding sites (length %ld)", seq->name.s, seq->seq.l);
-          find_binding_sites(seq, rvd_seq, diresidue_scores, best_score * cutoff, forward_only, c_upstream, results);
+          find_binding_sites(log_file, seq, lookahead_array, results);
 
         }
 
@@ -548,15 +559,9 @@ int run_talesf_task(Hashmap *kwargs) {
 
     qsort(results->data, array_size(results), sizeof(BindingSite *), binding_site_compare_score);
 
-    int print_results_result;
-
-    print_results_result = print_results(results, rvd_seq, kwargs, best_score, output_filepath, log_file);
+    abort = print_results(results, log_file);
 
     logger(log_file, "Finished");
-
-    if(print_results_result == 1) {
-      abort = 1;
-    }
 
   }
 
@@ -564,8 +569,8 @@ int run_talesf_task(Hashmap *kwargs) {
 
   if(results) {
 
-    for(i = 0; i < array_size(results); i++)
-    {
+    for(int i = 0; i < array_size(results); i++) {
+      
       BindingSite *site = (BindingSite *)array_get(results, i);
 
       free(site->sequence);
@@ -577,32 +582,15 @@ int run_talesf_task(Hashmap *kwargs) {
     array_delete(results, NULL);
 
   }
-
-
-  if(rvd_seq) {
-
-    for(i = 0; i < array_size(rvd_seq); i++)
-    {
-      char *temp = (char *)array_get(rvd_seq, i);
-      free(temp);
-    }
-
-
-    array_delete(rvd_seq, NULL);
-
-  }
-
-  if(diresidue_scores) {
-    hashmap_delete(diresidue_scores, free);
+  
+  if (lookahead_array) {
+    free(lookahead_array);
   }
 
   if(log_file != stdout) {
     fclose(log_file);
   }
 
-  if(abort) {
-    return 1;
-  } else {
-    return 0;
-  }
+  return abort;
+  
 }
