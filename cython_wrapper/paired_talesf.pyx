@@ -84,6 +84,11 @@ def ScorePairedTalesfTask(char *seqfilename, rvd_string, rvd_string2, char *outp
         
         Hashmap *diresidue_probabilities = get_diresidue_probabilities(rvd_array, weight)
         Hashmap *diresidue_scores = convert_probabilities_to_scores(diresidue_probabilities)
+    
+    hashmap_delete(diresidue_probabilities, NULL)
+    hashmap_add(diresidue_scores, "XX", double_array(0, 0, 0, 0, BIGGEST_RVD_SCORE_EVER))
+    
+    cdef:
         double **scoring_matrix = <double**> calloc(hashmap_size(diresidue_scores), sizeof(double*))
         
         unsigned int *rvd_seq = <unsigned int*> calloc(len(split_rvd_string), sizeof(unsigned int))
@@ -97,9 +102,7 @@ def ScorePairedTalesfTask(char *seqfilename, rvd_string, rvd_string2, char *outp
         double best_score = get_best_score(split_rvd_string, diresidue_scores)
         double best_score2 = get_best_score(split_rvd_string2, diresidue_scores)
         double *best_scores = [best_score, best_score2]
-    
-    hashmap_delete(diresidue_probabilities, NULL)
-    hashmap_add(diresidue_scores, "XX", double_array(0, 0, 0, 0, BIGGEST_RVD_SCORE_EVER))
+
     cdef char **diresidues = hashmap_keys(diresidue_scores)
     
     rvd_to_int = {}
@@ -143,5 +146,6 @@ def ScorePairedTalesfTask(char *seqfilename, rvd_string, rvd_string2, char *outp
     free(rvd_seq)
     free(rvd_seq2)
     
+    hashmap_delete(paired_talesf_kwargs, NULL)
     
     return task_result
