@@ -634,14 +634,17 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   // Begin processing
 
   int abort = 0;
-
+  int i, j;
+  gzFile seqfile;
+  kseq_t *seq;
+  
   omp_set_num_threads(numprocs);
 
-  #pragma omp parallel
+  #pragma omp parallel private(i, j, seq, seqfile)
   {
 
     // Open sequence file
-    gzFile seqfile = gzopen(seq_filename, "r");
+    seqfile = gzopen(seq_filename, "r");
 
     if (!seqfile) {
 
@@ -650,12 +653,12 @@ int run_paired_talesf_task(Hashmap *kwargs) {
 
     } else {
 
-      kseq_t *seq = kseq_init(seqfile);
+      seq = kseq_init(seqfile);
 
-      int j = 0;
+      j = 0;
 
       #pragma omp for schedule(static)
-      for (int i = 0; i < seq_num; i++) {
+      for (i = 0; i < seq_num; i++) {
 
         #pragma omp flush (abort)
         if (!abort) {
