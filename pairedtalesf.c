@@ -503,6 +503,7 @@ BindingSite *create_binding_site(kseq_t *seq, unsigned long i, unsigned long j, 
 // Identify and print out TAL effector binding sites
 void find_binding_sites(FILE *log_file, kseq_t *seq, double **lookahead_arrays, Array *results) {
   int c_upstream = *((int *) hashmap_get(talesf_kwargs, "c_upstream"));
+  int dimer = *((int *) hashmap_get(talesf_kwargs, "dimer"));
   int spacer_min = *((int *) hashmap_get(talesf_kwargs, "spacer_min"));
   int spacer_max = *((int *) hashmap_get(talesf_kwargs, "spacer_max"));
   
@@ -528,7 +529,10 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, double **lookahead_arrays, 
   for (int f_idx = 0; f_idx < 2; f_idx++) {
     
     for (int r_idx = 0; r_idx < 2; r_idx++) {
-        
+      
+      if (dimer == 1 && f_idx == r_idx) continue;
+      if (dimer == 2 && f_idx != r_idx) continue;
+      
       unsigned int *forward_rvd_seq = rvd_seqs[f_idx];
       unsigned int *reverse_rvd_seq = rvd_seqs[r_idx];
       
