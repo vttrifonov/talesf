@@ -17,6 +17,7 @@ void print_usage(FILE *out_stream, char *prog_name)
            "  Options:\n"
            "    -c|--cupstream        sets the allowed upstream bases; 0 for T only, 1 for C only, 2 for either\n"
            "    -d|--dimer            sets types of dimer targets to search for; 0 for both homo and heterodimers, 1 for heterodimers only, 2 for homodimers only\n"
+           "    -g|--usegpu           enables GPU acceleration for large sequences; has no effect if libpairedtalesf was not compiled with GPU support\n"
            "    -h|--help             print this help message and exit\n"
            "    -m|--min              the minimum allowed spacer size; default is 15\n"
            "    -n|--numprocs         the number of processors to use; default is 1\n"
@@ -40,6 +41,7 @@ int main(int argc, char **argv)
   char out_filepath[256];
   int c_upstream;
   int dimer;
+  int use_gpu;
   double weight;
   double cutoff;
   int min;
@@ -52,6 +54,7 @@ int main(int argc, char **argv)
   cutoff = 3.0;
   log_filepath = "NA";
   c_upstream = 0;
+  use_gpu = 0;
   dimer = 0;
   min = 15;
   max = 30;
@@ -59,7 +62,7 @@ int main(int argc, char **argv)
   prog_name = argv[0];
 
   int opt, opt_index;
-  const char *opt_str = "c:d:hn:o:s:w:t:m:x:";
+  const char *opt_str = "c:d:ghn:o:s:w:t:m:x:";
   const struct option otsf_options[] =
   {
     { "help", no_argument, NULL, 'h' },
@@ -69,6 +72,7 @@ int main(int argc, char **argv)
     { "cutoffmult", required_argument, NULL, 't' },
     { "cupstream", required_argument, NULL, 'c' },
     { "dimer", required_argument, NULL, 'd' },
+    { "usegpu", no_argument, NULL, 'g' },
     { "min", required_argument, NULL, 'm' },
     { "max", required_argument, NULL, 'x' },
     { NULL, no_argument, NULL, 0 },
@@ -94,8 +98,13 @@ int main(int argc, char **argv)
         }
 
         break;
-      
+        
+      case 'g':
+        use_gpu = 1;
+        break;
+    
       case 'd':
+      
         if( sscanf(optarg, "%d", &dimer) != 1 )
         {
           fprintf(stderr, "Error: unable to convert dimer '%s' to an integer\n", optarg);
@@ -248,6 +257,7 @@ int main(int argc, char **argv)
   hashmap_add(talesf_kwargs, "cutoff", &cutoff);
   hashmap_add(talesf_kwargs, "c_upstream", &c_upstream);
   hashmap_add(talesf_kwargs, "dimer", &dimer);
+  hashmap_add(talesf_kwargs, "use_gpu", &use_gpu);
   hashmap_add(talesf_kwargs, "spacer_min", &min);
   hashmap_add(talesf_kwargs, "spacer_max", &max);
   hashmap_add(talesf_kwargs, "num_procs", &num_procs);

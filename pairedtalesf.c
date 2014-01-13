@@ -698,7 +698,7 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, double **lookahead_arrays, 
   
   int spacer_min = *((int *) hashmap_get(talesf_kwargs, "spacer_min"));
   unsigned int *rvd_seqs_lens = hashmap_get(talesf_kwargs, "rvd_seqs_lens");
-
+  
   if (rvd_seqs_lens[0] + rvd_seqs_lens[1] + spacer_min > seq->seq.l) {
     logger(log_file, "Warning: skipping sequence '%s' since it is too short to have any sites.\n", seq->seq.s);
     return;
@@ -707,7 +707,8 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, double **lookahead_arrays, 
   logger(log_file, "Scanning %s for binding sites (length %ld)", seq->name.s, seq->seq.l);
   
   #ifdef PTF_GPU_ENABLED
-  if (seq->seq.l > 1000000) {
+  int use_gpu = *((int *) hashmap_get(talesf_kwargs, "use_gpu"));
+  if (use_gpu && seq->seq.l > 1000000) {
     gpu_the_whole_shebang(seq, lookahead_arrays, results);
   } else {
   #endif
