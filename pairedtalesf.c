@@ -339,7 +339,11 @@ int print_results(Array *results, FILE *log_file) {
         free(tal2_sequence);
         free(rvd_string_printable);
         free(rvd_string2_printable);
+        fclose(gff_out_file);
         fclose(tab_out_file);
+        if (genome_browser_file) {
+          fclose(genome_browser_file);
+        }
 
         return 1;
 
@@ -734,11 +738,7 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   int count_only = *((int *) hashmap_get(kwargs, "count_only"));
   double **scoring_matrix = hashmap_get(kwargs, "scoring_matrix");
   
-  // Open sequence file
-  
-  gzFile seqfile;
-  
-  seqfile = gzopen(seq_filename, "r");
+
 
   // Setup the logger
 
@@ -747,6 +747,12 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   if (log_filepath && strcmp(log_filepath, "NA") != 0) {
     log_file = fopen(log_filepath, "a");
   }
+  
+  // Open sequence file
+  
+  gzFile seqfile;
+  
+  seqfile = gzopen(seq_filename, "r");
   
   if (!seqfile) {
     logger(log_file, "Error: unable to open sequence '%s'", seq_filename);
@@ -805,27 +811,17 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   omp_set_num_threads(numprocs);
   
   // Open sequence file
-  seqfile = gzopen(seq_filename, "r");
+
+  kseq_t *seq = kseq_init(seqfile);
   
-  if (!seqfile) {
-    
-    logger(log_file, "Error: unable to open sequence '%s'", seq_filename);
-    abort = 1;
-    
-  } else {
-    
-    kseq_t *seq = kseq_init(seqfile);
-    
-    int result;
-    
-    while ((result = kseq_read(seq)) >= 0) {
-      find_binding_sites(log_file, seq, lookahead_arrays, results);
-    }
-    
-    kseq_destroy(seq);
-    gzclose(seqfile);
-    
+  int result;
+  
+  while ((result = kseq_read(seq)) >= 0) {
+    find_binding_sites(log_file, seq, lookahead_arrays, results);
   }
+  
+  kseq_destroy(seq);
+  gzclose(seqfile);
 
   if (!abort) {
 
