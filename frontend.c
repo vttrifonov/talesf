@@ -103,7 +103,7 @@ int main(int argc, char **argv)
         }
 
         if ( dimer != 0 && dimer != 1 && dimer != 2) {
-          fprintf(stderr, "Error: cupstream must be 0, 1, or 2\n");
+          fprintf(stderr, "Error: dimer must be 0, 1, or 2\n");
           return 1;
         }
 
@@ -232,6 +232,8 @@ int main(int argc, char **argv)
   best_scores[0] = get_best_score(rvd_array, diresidue_scores);
   best_scores[1] = get_best_score(rvd_array2, diresidue_scores);
   
+  int scoring_matrix_length = hashmap_size(diresidue_scores);
+  
   hashmap_add(talesf_kwargs, "seq_filename", seq_filepath);
   hashmap_add(talesf_kwargs, "rvd_seqs", rvd_seqs);
   hashmap_add(talesf_kwargs, "rvd_seqs_lens", rvd_seqs_lens);
@@ -239,6 +241,7 @@ int main(int argc, char **argv)
   hashmap_add(talesf_kwargs, "rvd_string2", rvd_string2);
   hashmap_add(talesf_kwargs, "best_scores", best_scores);
   hashmap_add(talesf_kwargs, "scoring_matrix", scoring_matrix);
+  hashmap_add(talesf_kwargs, "scoring_matrix_length", &scoring_matrix_length);
   hashmap_add(talesf_kwargs, "output_filepath", out_filepath);
   hashmap_add(talesf_kwargs, "log_filepath", log_filepath);
   hashmap_add(talesf_kwargs, "weight", &weight);

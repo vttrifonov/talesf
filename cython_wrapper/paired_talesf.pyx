@@ -118,6 +118,8 @@ def ScorePairedTalesfTask(char *seqfilename, rvd_string, rvd_string2, char *outp
     for i in range(rvd_seq2_len):
         rvd_seq2[i] = rvd_to_int[split_rvd_string2[i]]
     
+    cdef int scoring_matrix_length = hashmap_size(diresidue_scores)
+    
     hashmap_add(paired_talesf_kwargs, "seq_filename", seqfilename)
     hashmap_add(paired_talesf_kwargs, "rvd_seqs", rvd_seqs)
     hashmap_add(paired_talesf_kwargs, "rvd_seqs_lens", rvd_seqs_lens)
@@ -125,6 +127,7 @@ def ScorePairedTalesfTask(char *seqfilename, rvd_string, rvd_string2, char *outp
     hashmap_add(paired_talesf_kwargs, "rvd_string2", rvd_string2_ptr)
     hashmap_add(paired_talesf_kwargs, "best_scores", best_scores)
     hashmap_add(paired_talesf_kwargs, "scoring_matrix", scoring_matrix)
+    hashmap_add(paired_talesf_kwargs, "scoring_matrix_length", &scoring_matrix_length)
     hashmap_add(paired_talesf_kwargs, "output_filepath", output_filepath)
     hashmap_add(paired_talesf_kwargs, "log_filepath", log_filepath)
     hashmap_add(paired_talesf_kwargs, "weight", &weight)

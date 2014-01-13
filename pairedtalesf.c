@@ -26,6 +26,10 @@ See README for license details.
 #include <bcutils/kseq.h>
 KSEQ_INIT(gzFile, gzread)
 
+#ifdef PTF_GPU_ENABLED
+#include <btfcount/tfcount_cuda.h>
+#endif
+
 typedef struct {
   char *sequence[2];
   char *sequence_name;
@@ -500,39 +504,32 @@ BindingSite *create_binding_site(kseq_t *seq, unsigned long i, unsigned long j, 
 
 }
 
-// Identify and print out TAL effector binding sites
-void find_binding_sites(FILE *log_file, kseq_t *seq, double **lookahead_arrays, Array *results) {
-  int c_upstream = *((int *) hashmap_get(talesf_kwargs, "c_upstream"));
-  int dimer = *((int *) hashmap_get(talesf_kwargs, "dimer"));
-  int spacer_min = *((int *) hashmap_get(talesf_kwargs, "spacer_min"));
-  int spacer_max = *((int *) hashmap_get(talesf_kwargs, "spacer_max"));
+void cpu_the_whole_shebang(kseq_t *seq, double **lookahead_arrays, Array *results) {
   
   int count_only = *((int *) hashmap_get(talesf_kwargs, "count_only"));
-
-  unsigned int **rvd_seqs = hashmap_get(talesf_kwargs, "rvd_seqs");
-  unsigned int *rvd_seqs_lens = hashmap_get(talesf_kwargs, "rvd_seqs_lens");
-  double **scoring_matrix = hashmap_get(talesf_kwargs, "scoring_matrix");
-
+  
   int **count_results_array = NULL;
   
   if (count_only) {
     count_results_array = hashmap_get(talesf_kwargs, "count_results_array");
   }
-
-  if (rvd_seqs_lens[0] + rvd_seqs_lens[1] + spacer_min > seq->seq.l) {
-    logger(log_file, "Warning: skipping sequence '%s' since it is shorter than the RVD sequence\n", seq->seq.s);
-    return;
-  }
-
-  logger(log_file, "Scanning %s for binding sites (length %ld)", seq->name.s, seq->seq.l);
-
-  for (int f_idx = 0; f_idx < 2; f_idx++) {
+  
+  int dimer = *((int *) hashmap_get(talesf_kwargs, "dimer"));
+  int spacer_min = *((int *) hashmap_get(talesf_kwargs, "spacer_min"));
+  int spacer_max = *((int *) hashmap_get(talesf_kwargs, "spacer_max"));
+  int c_upstream = *((int *) hashmap_get(talesf_kwargs, "c_upstream"));
+  unsigned int **rvd_seqs = hashmap_get(talesf_kwargs, "rvd_seqs");
+  unsigned int *rvd_seqs_lens = hashmap_get(talesf_kwargs, "rvd_seqs_lens");
+  double **scoring_matrix = hashmap_get(talesf_kwargs, "scoring_matrix");
+  
+  for (int k = 0; k < 4; k++) {
     
-    for (int r_idx = 0; r_idx < 2; r_idx++) {
-      
-      if (dimer == 1 && f_idx == r_idx) continue;
-      if (dimer == 2 && f_idx != r_idx) continue;
-      
+    int f_idx = k / 2;
+    int r_idx = k % 2;
+    
+    if (dimer == 1 && f_idx == r_idx) continue;
+    if (dimer == 2 && f_idx != r_idx) continue;
+    
       unsigned int *forward_rvd_seq = rvd_seqs[f_idx];
       unsigned int *reverse_rvd_seq = rvd_seqs[r_idx];
       
@@ -541,7 +538,8 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, double **lookahead_arrays, 
         
       int num_forward_rvds = rvd_seqs_lens[f_idx];
       int num_reverse_rvds = rvd_seqs_lens[r_idx];
-
+      
+      #pragma omp parallel for schedule(static)
       for (unsigned long i = 1; i <= seq->seq.l - num_forward_rvds; i++) {
         
         char forward_upstream = seq->seq.s[i-1];
@@ -596,8 +594,128 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, double **lookahead_arrays, 
       
     }
     
+  //}
+  
+}
+
+#ifdef PTF_GPU_ENABLED
+void gpu_the_whole_shebang(kseq_t *seq, double **lookahead_arrays, Array *results) {
+  
+  int count_only = *((int *) hashmap_get(talesf_kwargs, "count_only"));
+  
+  int **count_results_array = NULL;
+  
+  if (count_only) {
+    count_results_array = hashmap_get(talesf_kwargs, "count_results_array");
+  }
+  
+  int dimer = *((int *) hashmap_get(talesf_kwargs, "dimer"));
+  int spacer_min = *((int *) hashmap_get(talesf_kwargs, "spacer_min"));
+  int spacer_max = *((int *) hashmap_get(talesf_kwargs, "spacer_max"));
+  int c_upstream = *((int *) hashmap_get(talesf_kwargs, "c_upstream"));
+  unsigned int **rvd_seqs = hashmap_get(talesf_kwargs, "rvd_seqs");
+  unsigned int *rvd_seqs_lens = hashmap_get(talesf_kwargs, "rvd_seqs_lens");
+  double **scoring_matrix = hashmap_get(talesf_kwargs, "scoring_matrix");
+  
+  unsigned int *d_rvd_pair = hashmap_get(talesf_kwargs, "d_rvd_pair");
+  double *d_scoring_matrix = hashmap_get(talesf_kwargs, "d_scoring_matrix");
+  size_t sm_pitch = *((size_t *) hashmap_get(talesf_kwargs, "sm_pitch"));;
+  unsigned char *d_prelim_results = hashmap_get(talesf_kwargs, "d_prelim_results");
+  int *d_prelim_results_indexes = hashmap_get(talesf_kwargs, "d_prelim_results_indexes");
+  unsigned char *prelim_results = hashmap_get(talesf_kwargs, "prelim_results");
+  int *prelim_results_indexes = hashmap_get(talesf_kwargs, "prelim_results_indexes");
+  char *d_reference_sequence = hashmap_get(talesf_kwargs, "d_reference_sequence");
+  unsigned long reference_window_size = *((int *) hashmap_get(talesf_kwargs, "reference_window_size"));
+  int score_block_x = *((int *) hashmap_get(talesf_kwargs, "score_block_x"));
+  int score_block_y = *((int *) hashmap_get(talesf_kwargs, "score_block_y"));
+  
+  double cutoffs[2];
+  cutoffs[0] = lookahead_arrays[0][rvd_seqs_lens[0] - 1];
+  cutoffs[1] = lookahead_arrays[1][rvd_seqs_lens[1] - 1];
+  
+  int seq_index_index_max = RunPairedFindBindingSitesKeepScores(d_reference_sequence, d_rvd_pair, d_scoring_matrix, sm_pitch, d_prelim_results, d_prelim_results_indexes,
+                                                            prelim_results, prelim_results_indexes,
+                                                            reference_window_size, score_block_x, score_block_y, rvd_seqs_lens, seq->seq.s,
+                                                            seq->seq.l, cutoffs, c_upstream);
+  #pragma omp parallel for schedule(static)
+  for (int k = 0; k < 4; k++) {
+    
+    int f_idx = k / 2;
+    int r_idx = k % 2;
+    
+    if (dimer == 1 && f_idx == r_idx) continue;
+    if (dimer == 2 && f_idx != r_idx) continue;
+    
+    int seq_index;
+    
+    for (int seq_index_index = 0; seq_index_index < seq_index_index_max; seq_index_index++) {
+      
+      seq_index = prelim_results_indexes[seq_index_index];
+      
+      unsigned int u_shift = (f_idx == 0 ? 0 : 2);
+      unsigned int d_shift = (r_idx == 0 ? 1 : 3);
+      
+      int first_t = (prelim_results[seq_index] & (1UL << u_shift)) > 0;
+      int first_c = (prelim_results[seq_index] & (1UL << (u_shift + 4))) > 0;
+      
+      if (!((c_upstream != 0 && first_c) || (c_upstream != 1 && first_t))) continue;
+      
+      for (int i = spacer_min; i <= spacer_max; i++) {
+        
+        if (seq_index + rvd_seqs_lens[f_idx] + i >= seq->seq.l) continue;
+        
+        if ((prelim_results[seq_index + rvd_seqs_lens[f_idx] + i] & (1UL << (d_shift + (first_c * 4))) ) > 0) {
+          
+          if (count_only) { 
+            
+            count_results_array[f_idx][r_idx]++;
+            
+          } else {
+            
+            int end_seq_index = seq_index + rvd_seqs_lens[f_idx] + i + rvd_seqs_lens[r_idx] - 1;
+            
+            double forward_score = score_binding_site(seq, seq_index, rvd_seqs[f_idx], rvd_seqs_lens[f_idx], scoring_matrix, lookahead_arrays[f_idx], 0);
+            double reverse_score = score_binding_site(seq, end_seq_index - rvd_seqs_lens[r_idx] + 1, rvd_seqs[r_idx], rvd_seqs_lens[r_idx], scoring_matrix, lookahead_arrays[r_idx], 1);
+            BindingSite *site = create_binding_site(seq, seq_index, end_seq_index, rvd_seqs_lens[f_idx], forward_score, rvd_seqs_lens[r_idx], reverse_score, i, f_idx, r_idx);
+            
+            #pragma omp critical (add_result)
+            array_add(results, site);
+            
+          }
+          
+        }
+        
+      }
+      
+    }
+    
+  }
+}
+#endif
+
+// Identify and print out TAL effector binding sites
+void find_binding_sites(FILE *log_file, kseq_t *seq, double **lookahead_arrays, Array *results) {
+  
+  int spacer_min = *((int *) hashmap_get(talesf_kwargs, "spacer_min"));
+  unsigned int *rvd_seqs_lens = hashmap_get(talesf_kwargs, "rvd_seqs_lens");
+
+  if (rvd_seqs_lens[0] + rvd_seqs_lens[1] + spacer_min > seq->seq.l) {
+    logger(log_file, "Warning: skipping sequence '%s' since it is too short to have any sites.\n", seq->seq.s);
+    return;
   }
 
+  logger(log_file, "Scanning %s for binding sites (length %ld)", seq->name.s, seq->seq.l);
+  
+  #ifdef PTF_GPU_ENABLED
+  if (seq->seq.l > 1000000) {
+    gpu_the_whole_shebang(seq, lookahead_arrays, results);
+  } else {
+  #endif
+    cpu_the_whole_shebang(seq, lookahead_arrays, results);
+  #ifdef PTF_GPU_ENABLED
+  }
+  #endif
+  
 }
 
 int run_paired_talesf_task(Hashmap *kwargs) {
@@ -614,6 +732,12 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   int numprocs = *((int *) hashmap_get(kwargs, "num_procs"));
   int count_only = *((int *) hashmap_get(kwargs, "count_only"));
   double **scoring_matrix = hashmap_get(kwargs, "scoring_matrix");
+  
+  // Open sequence file
+  
+  gzFile seqfile;
+  
+  seqfile = gzopen(seq_filename, "r");
 
   // Setup the logger
 
@@ -622,26 +746,15 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   if (log_filepath && strcmp(log_filepath, "NA") != 0) {
     log_file = fopen(log_filepath, "a");
   }
-
-  // Determine number of sequences in the input file
-
-  int seq_num;
-  char cmd[256], line[32];
-
-  sprintf(cmd, "grep '^>' %s | wc -l", seq_filename);
-  FILE *fasta_filesize_in = popen(cmd, "r");
-
-  if (!fasta_filesize_in) {
-    perror("Error: unable to check fasta file size\n");
-    logger(log_file, "Error: unable to check fasta file size");
-    if (log_file != stdout) fclose(log_file);
+  
+  if (!seqfile) {
+    logger(log_file, "Error: unable to open sequence '%s'", seq_filename);
+    if (log_file != stdout) {
+      fclose(log_file);
+    }
     return 1;
   }
-
-  fgets(line, sizeof(line), fasta_filesize_in);
-  pclose(fasta_filesize_in);
-  seq_num = atoi(line);
-
+  
   // Process RVD sequences
 
   Array *results = array_new( sizeof(BindingSite *) );
@@ -656,61 +769,61 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   // Begin processing
 
   int abort = 0;
-  int i, j;
-  gzFile seqfile;
-  kseq_t *seq;
+
+  #ifdef PTF_GPU_ENABLED
+  int scoring_matrix_length = *((int *) hashmap_get(kwargs, "scoring_matrix_length"));
+  unsigned int *d_rvd_pair;
+  double *d_scoring_matrix;
+  size_t sm_pitch;
+  unsigned char *d_prelim_results;
+  int *d_prelim_results_indexes;
+  unsigned char *prelim_results;
+  int *prelim_results_indexes;
+  char *d_reference_sequence;
+  unsigned long reference_window_size;
+  int score_block_x;
+  int score_block_y;
+
+  RunPairedFindBindingSitesKeepScores_init(&d_rvd_pair, &d_scoring_matrix, &sm_pitch, &d_prelim_results, &d_prelim_results_indexes, &d_reference_sequence,
+                                           &prelim_results, &prelim_results_indexes, &reference_window_size, &score_block_x, &score_block_y,
+                                           rvd_seqs, scoring_matrix, rvd_seqs_lens, scoring_matrix_length);
+
+  hashmap_add(kwargs, "d_rvd_pair", d_rvd_pair);
+  hashmap_add(kwargs, "d_scoring_matrix", d_scoring_matrix);
+  hashmap_add(kwargs, "sm_pitch", &sm_pitch);
+  hashmap_add(kwargs, "d_prelim_results", d_prelim_results);
+  hashmap_add(kwargs, "d_prelim_results_indexes", d_prelim_results_indexes);
+  hashmap_add(kwargs, "prelim_results", prelim_results);
+  hashmap_add(kwargs, "prelim_results_indexes", prelim_results_indexes);
+  hashmap_add(kwargs, "d_reference_sequence", d_reference_sequence);
+  hashmap_add(kwargs, "reference_window_size", &reference_window_size);
+  hashmap_add(kwargs, "score_block_x", &score_block_x);
+  hashmap_add(kwargs, "score_block_y", &score_block_y);
+  #endif
   
   omp_set_num_threads(numprocs);
-
-  #pragma omp parallel private(i, j, seq, seqfile)
-  {
-
-    // Open sequence file
-    seqfile = gzopen(seq_filename, "r");
-
-    if (!seqfile) {
-
-      logger(log_file, "Error: unable to open sequence '%s'", seq_filename);
-      abort = 1;
-
-    } else {
-
-      seq = kseq_init(seqfile);
-
-      j = 0;
-
-      #pragma omp for schedule(static)
-      for (i = 0; i < seq_num; i++) {
-
-        #pragma omp flush (abort)
-        if (!abort) {
-
-          while (j <= i) {
-
-            int result = kseq_read(seq);
-
-            if (result < 0) {
-              logger(log_file, "Error: problem parsing data from '%s'", seq_filename);
-              abort = 1;
-            }
-
-            j++;
-
-          }
-
-          if (!abort) {
-            find_binding_sites(log_file, seq, lookahead_arrays, results);
-          }
-
-        }
-
-      }
-
-      kseq_destroy(seq);
-      gzclose(seqfile);
-
+  
+  // Open sequence file
+  seqfile = gzopen(seq_filename, "r");
+  
+  if (!seqfile) {
+    
+    logger(log_file, "Error: unable to open sequence '%s'", seq_filename);
+    abort = 1;
+    
+  } else {
+    
+    kseq_t *seq = kseq_init(seqfile);
+    
+    int result;
+    
+    while ((result = kseq_read(seq)) >= 0) {
+      find_binding_sites(log_file, seq, lookahead_arrays, results);
     }
-
+    
+    kseq_destroy(seq);
+    gzclose(seqfile);
+    
   }
 
   if (!abort) {
@@ -726,7 +839,11 @@ int run_paired_talesf_task(Hashmap *kwargs) {
     logger(log_file, "Finished");
 
   }
-
+  
+  #ifdef PTF_GPU_ENABLED
+  RunPairedFindBindingSitesKeepScores_cleanup(d_reference_sequence, d_rvd_pair, d_scoring_matrix, d_prelim_results, d_prelim_results_indexes, prelim_results, prelim_results_indexes);
+  #endif
+  
   // Free memory
 
   if (results) {
@@ -748,8 +865,6 @@ int run_paired_talesf_task(Hashmap *kwargs) {
 
   free(lookahead_arrays[0]);
   free(lookahead_arrays[1]);
-
-
 
   if (log_file != stdout) {
     fclose(log_file);
