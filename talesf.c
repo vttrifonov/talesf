@@ -265,7 +265,14 @@ int print_results(Array *results, FILE *log_file) {
           sequence[j] = ' ';
         else {
           fprintf(stderr, "Error: unexpected character '%c'\n", base);
-          exit(1);
+          free(sequence);
+          free(rvd_string_printable);
+          fclose(gff_out_file);
+          fclose(tab_out_file);
+          if (genome_browser_file) {
+            fclose(genome_browser_file);
+          }
+          return 1;
         }
         
       }
@@ -318,6 +325,105 @@ int print_results(Array *results, FILE *log_file) {
 
 }
 
+double score_binding_site(kseq_t *seq, unsigned long i, unsigned int *rvd_seq, unsigned int rvd_seq_len, double **scoring_matrix, double *lookahead_array, int reverse) {
+
+  double total_score = 0.0;
+  int num_rvds = rvd_seq_len;
+
+  if (!reverse) {
+
+    for (unsigned long j = 0; j < rvd_seq_len; j++) {
+
+      double *scores = scoring_matrix[rvd_seq[j]];
+
+      if (seq->seq.s[i+j] == 'A' || seq->seq.s[i+j] == 'a')
+        total_score += scores[0];
+      else if (seq->seq.s[i+j] == 'C' || seq->seq.s[i+j] == 'c')
+        total_score += scores[1];
+      else if (seq->seq.s[i+j] == 'G' || seq->seq.s[i+j] == 'g')
+        total_score += scores[2];
+      else if (seq->seq.s[i+j] == 'T' || seq->seq.s[i+j] == 't')
+        total_score += scores[3];
+      else
+        total_score += lookahead_array[num_rvds - 1] + 1;
+
+      if (total_score > lookahead_array[j])
+        return -1;
+
+    }
+
+  } else {
+
+    for (unsigned long j = 0; j < rvd_seq_len; j++) {
+
+      double *scores = scoring_matrix[rvd_seq[j]];
+
+      unsigned long k = i + rvd_seq_len - j - 2;
+
+      if (seq->seq.s[k] == 'A' || seq->seq.s[k] == 'a')
+        total_score += scores[3];
+      else if (seq->seq.s[k] == 'C' || seq->seq.s[k] == 'c')
+        total_score += scores[2];
+      else if (seq->seq.s[k] == 'G' || seq->seq.s[k] == 'g')
+        total_score += scores[1];
+      else if (seq->seq.s[k] == 'T' || seq->seq.s[k] == 't')
+        total_score += scores[0];
+      else
+        total_score += lookahead_array[num_rvds - 1] + 1;
+
+      if (total_score > lookahead_array[j])
+        return -1;
+    }
+
+  }
+
+  return total_score;
+
+}
+
+BindingSite *create_binding_site(kseq_t *seq, unsigned long i, int num_rvds, double score, int reverse) {
+
+  int seq_name_len = strlen(seq->name.s);
+  
+  BindingSite *site = malloc(sizeof(BindingSite));
+  
+  site->sequence = calloc(num_rvds + 2 + 1, sizeof(char));
+  site->sequence[num_rvds + 2] = '\0';
+  
+  site->sequence_name = calloc(seq_name_len + 1, sizeof(char));
+  site->sequence_name[seq_name_len] = '\0';
+  strncpy(site->sequence_name, seq->name.s, seq_name_len);
+  
+  site->score = score;
+  
+  if (!(reverse == 1)) {
+    
+    site->strand = 1;
+    site->index = i;
+    
+    strncpy(site->sequence, seq->seq.s + site->index - 1, 1);
+    site->sequence[1] = ' ';
+    strncpy(site->sequence + 2, seq->seq.s + site->index, num_rvds);
+    
+  } else {
+    
+    site->strand = -1;
+    site->index = i - 1;
+    
+    strncpy(site->sequence, seq->seq.s + site->index, num_rvds);
+    site->sequence[num_rvds] = ' ';
+    strncpy(site->sequence + num_rvds + 1, seq->seq.s + site->index + num_rvds, 1);
+    
+  }
+  
+  for(int j = 0; j < num_rvds + 2 + 1; j++) {
+    site->sequence[j] = toupper(site->sequence[j]);
+  }
+  
+  return site;
+
+}
+
 // Identify and print out TAL effector binding sites
 void find_binding_sites(FILE *log_file, kseq_t *seq, double *lookahead_array, Array *results) {
   
@@ -333,126 +439,41 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, double *lookahead_array, Ar
     return;
   }
 
-  int seq_name_len = strlen(seq->name.s);
-
   for(unsigned long i = 1; i <= seq->seq.l - num_rvds; i++) {
     
     if((c_upstream != 0 && (seq->seq.s[i-1] == 'C' || seq->seq.s[i-1] == 'c')) || (c_upstream != 1 && (seq->seq.s[i-1] == 'T' || seq->seq.s[i-1] == 't'))) {
       
-      double total_score = 0.0;
-      
-      for(int j = 0; j < num_rvds; j++) {
-        
-        double *scores = scoring_matrix[rvd_seq[j]];
+      double score = score_binding_site(seq, i, rvd_seq, num_rvds, scoring_matrix, lookahead_array, 0);
 
-        if(seq->seq.s[i+j] == 'A' || seq->seq.s[i+j] == 'a')
-          total_score += scores[0];
-        else if(seq->seq.s[i+j] == 'C' || seq->seq.s[i+j] == 'c')
-          total_score += scores[1];
-        else if(seq->seq.s[i+j] == 'G' || seq->seq.s[i+j] == 'g')
-          total_score += scores[2];
-        else if(seq->seq.s[i+j] == 'T' || seq->seq.s[i+j] == 't')
-          total_score += scores[3];
-        else
-          total_score += lookahead_array[num_rvds - 1] + 1;
+      if(score != -1) {
 
-        if(total_score > lookahead_array[j]) {
-          total_score = -1;
-          break;
-        }
-        
-      }
-
-      if(total_score != -1) {
-
-        BindingSite *site = malloc(sizeof(BindingSite));
-
-        site->sequence = calloc(num_rvds + 2 + 1, sizeof(char));
-        site->sequence_name = calloc(seq_name_len + 1, sizeof(char));
-        site->sequence[num_rvds + 2] = '\0';
-        site->sequence_name[seq_name_len] = '\0';
-
-        site->strand = 1;
-        site->index = i;
-
-        strncpy(site->sequence, seq->seq.s + site->index - 1, 1);
-        site->sequence[1] = ' ';
-        strncpy(site->sequence + 2, seq->seq.s + site->index, num_rvds);
-        
-        for(int j = 0; j < num_rvds + 2 + 1; j++) {
-            site->sequence[j] = toupper(site->sequence[j]);
-        }
-        
-        strncpy(site->sequence_name, seq->name.s, seq_name_len);
-
-        site->score = total_score;
+        BindingSite *site = create_binding_site(seq, i, num_rvds, score, 0);
 
         #pragma omp critical (add_result)
         array_add(results, site);
 
       }
+      
     }
 
     if(!forward_only) {
       
       if((c_upstream != 0 && (seq->seq.s[i + num_rvds - 1] == 'G' || seq->seq.s[i + num_rvds - 1] == 'g')) || (c_upstream != 1 && (seq->seq.s[i + num_rvds - 1] == 'A' || seq->seq.s[i + num_rvds - 1] == 'a'))) {
         
-        double total_score = 0.0;
+        double score = score_binding_site(seq, i, rvd_seq, num_rvds, scoring_matrix, lookahead_array, 1);
         
-        for(int j = 0; j < num_rvds; j++) {
-          
-          double *scores = scoring_matrix[rvd_seq[j]];
-          
-          unsigned long k = i + num_rvds - j - 2;
-
-          if(seq->seq.s[k] == 'A' || seq->seq.s[k] == 'a')
-            total_score += scores[3];
-          else if(seq->seq.s[k] == 'C' || seq->seq.s[k] == 'c')
-            total_score += scores[2];
-          else if(seq->seq.s[k] == 'G' || seq->seq.s[k] == 'g')
-            total_score += scores[1];
-          else if(seq->seq.s[k] == 'T' || seq->seq.s[k] == 't')
-            total_score += scores[0];
-          else
-            total_score += lookahead_array[num_rvds - 1] + 1;
-
-          if(total_score > lookahead_array[j]) {
-            total_score = -1;
-            break;
-          }
-          
-        }
-
-        if(total_score != -1) {
-
-          BindingSite *site = malloc(sizeof(BindingSite));
-
-          site->sequence = calloc(num_rvds + 2 + 1, sizeof(char));
-          site->sequence_name = calloc(seq_name_len + 1, sizeof(char));
-          site->sequence[num_rvds + 2] = '\0';
-          site->sequence_name[seq_name_len] = '\0';
-
-          site->strand = -1;
-          site->index = i - 1;
-
-          strncpy(site->sequence, seq->seq.s + site->index, num_rvds);
-          site->sequence[num_rvds] = ' ';
-          strncpy(site->sequence + num_rvds + 1, seq->seq.s + site->index + num_rvds, 1);
-          
-          for(int j = 0; j < num_rvds + 2 + 1; j++) {
-            site->sequence[j] = toupper(site->sequence[j]);
-          }
-          
-          strncpy(site->sequence_name, seq->name.s, seq_name_len);
-
-          site->score = total_score;
-
+        if(score != -1) {
+  
+          BindingSite *site = create_binding_site(seq, i, num_rvds, score, 1);
+  
           #pragma omp critical (add_result)
           array_add(results, site);
-
+  
         }
+        
       }
     }
+    
   }
 
 }
