@@ -438,7 +438,10 @@ void find_binding_sites(FILE *log_file, kseq_t *seq, double *lookahead_array, Ar
     logger(log_file, "Warning: skipping sequence '%s' since it is shorter than the RVD sequence\n", seq->seq.s);
     return;
   }
-
+  
+  logger(log_file, "Scanning %s for binding sites (length %ld)", seq->name.s, seq->seq.l);
+  
+  #pragma omp parallel for schedule(static)
   for(unsigned long i = 1; i <= seq->seq.l - num_rvds; i++) {
     
     if((c_upstream != 0 && (seq->seq.s[i-1] == 'C' || seq->seq.s[i-1] == 'c')) || (c_upstream != 1 && (seq->seq.s[i-1] == 'T' || seq->seq.s[i-1] == 't'))) {
@@ -491,16 +494,34 @@ int run_talesf_task(Hashmap *kwargs) {
   double cutoff = *((double *) hashmap_get(kwargs, "cutoff"));
   int numprocs = *((int *) hashmap_get(kwargs, "num_procs"));
   double **scoring_matrix = hashmap_get(kwargs, "scoring_matrix");
+  
+  // Setup the logger
 
+  FILE *log_file = stdout;
+
+  if (log_filepath && strcmp(log_filepath, "NA") != 0) {
+    log_file = fopen(log_filepath, "a");
+  }
+  
+  // Open sequence file
+  
+  gzFile seqfile;
+  
+  seqfile = gzopen(seq_filename, "r");
+  
+  if (!seqfile) {
+    logger(log_file, "Error: unable to open sequence '%s'", seq_filename);
+    if (log_file != stdout) {
+      fclose(log_file);
+    }
+    return 1;
+  }
+  
   // Program variable domain
   int seq_num;
   char cmd[256], line[32];
 
-  FILE *log_file = stdout;
 
-  if(log_filepath && strcmp(log_filepath, "NA") != 0) {
-    log_file = fopen(log_filepath, "a");
-  }
   
   // Determine number of sequences in file
   sprintf(cmd, "grep '^>' %s | wc -l", seq_filename);
@@ -523,58 +544,19 @@ int run_talesf_task(Hashmap *kwargs) {
   // Begin processing
 
   int abort = 0;
-  int i, j;
-  gzFile seqfile;
-  kseq_t *seq;
 
   omp_set_num_threads(numprocs);
   
-  #pragma omp parallel private(i, j, seq, seqfile)
-  {
-
-    // Open genomic sequence file
-    seqfile = gzopen(seq_filename, "r");
-    if(!seqfile)
-    {
-
-      logger(log_file, "Error: unable to open sequence '%s'", seq_filename);
-      abort = 1;
-
-    } else {
-
-      seq = kseq_init(seqfile);
-
-      j = 0;
-      #pragma omp for schedule(static)
-      for(i = 0; i < seq_num; i++)
-      {
-
-        #pragma omp flush (abort)
-        if (!abort) {
-          while(j <= i)
-          {
-            int result = kseq_read(seq);
-            if(result < 0)
-            {
-              logger(log_file, "Error: problem parsing data from '%s'", seq_filename);
-              abort = 1;
-            }
-            j++;
-          }
-
-          logger(log_file, "Scanning %s for binding sites (length %ld)", seq->name.s, seq->seq.l);
-          find_binding_sites(log_file, seq, lookahead_array, results);
-
-        }
-
-      }
-
-      kseq_destroy(seq);
-      gzclose(seqfile);
-
-    }
-
+  kseq_t *seq = kseq_init(seqfile);
+  
+  int result;
+  
+  while ((result = kseq_read(seq)) >= 0) {
+    find_binding_sites(log_file, seq, lookahead_array, results);
   }
+  
+  kseq_destroy(seq);
+  gzclose(seqfile);
 
   if(!abort) {
 
