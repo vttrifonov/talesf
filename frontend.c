@@ -16,6 +16,7 @@ void print_usage(FILE *out_stream, char *prog_name)
   fprintf( out_stream, "\nUsage: %s [options] sequence_file_path \"rvdseq\"\n"
            "  Options:\n"
            "    -c|--cupstream        sets the allowed upstream bases; 0 for T only, 1 for C only, 2 for either\n"
+           "    -g|--usegpu           enables GPU acceleration for large sequences; has no effect if libpairedtalesf was not compiled with GPU support\n"
            "    -f|--forwardonly      only search the forward strand of the sequence\n"
            "    -h|--help             print this help message and exit\n"
            "    -n|--numprocs         the number of processors to use; default is 1\n"
@@ -37,6 +38,7 @@ int main(int argc, char **argv)
   int num_procs;
   char out_filepath[256];
   int c_upstream;
+  int use_gpu;
   double weight;
   double cutoff;
 
@@ -48,11 +50,12 @@ int main(int argc, char **argv)
   cutoff = 3.0;
   log_filepath = "NA";
   c_upstream = 0;
+  use_gpu = 0;
 
   prog_name = argv[0];
 
   int opt, opt_index;
-  const char *opt_str = "c:fhn:o:s:w:x:";
+  const char *opt_str = "c:gfhn:o:s:w:x:";
   const struct option otsf_options[] =
   {
     { "forwardonly", no_argument, NULL, 'f' },
@@ -62,6 +65,7 @@ int main(int argc, char **argv)
     { "weight", required_argument, NULL, 'w' },
     { "cutoffmult", required_argument, NULL, 'x' },
     { "cupstream", required_argument, NULL, 'c' },
+    { "usegpu", no_argument, NULL, 'g' },
     { NULL, no_argument, NULL, 0 },
   };
 
@@ -88,7 +92,11 @@ int main(int argc, char **argv)
         }
 
         break;
-
+        
+      case 'g':
+        use_gpu = 1;
+        break;
+      
       case 'h':
         print_usage(stdout, prog_name);
         return 0;
@@ -180,17 +188,21 @@ int main(int argc, char **argv)
   
   double best_score = get_best_score(rvd_array, diresidue_scores);
   
+  int scoring_matrix_length = hashmap_size(diresidue_scores);
+  
   hashmap_add(talesf_kwargs, "seq_filename", seq_filepath);
   hashmap_add(talesf_kwargs, "rvd_seq", rvd_seq);
   hashmap_add(talesf_kwargs, "rvd_seq_len", &rvd_seq_len);
   hashmap_add(talesf_kwargs, "rvd_string", rvd_string);
   hashmap_add(talesf_kwargs, "best_score", &best_score);
   hashmap_add(talesf_kwargs, "scoring_matrix", scoring_matrix);
+  hashmap_add(talesf_kwargs, "scoring_matrix_length", &scoring_matrix_length);
   hashmap_add(talesf_kwargs, "output_filepath", out_filepath);
   hashmap_add(talesf_kwargs, "log_filepath", log_filepath);
   hashmap_add(talesf_kwargs, "weight", &weight);
   hashmap_add(talesf_kwargs, "cutoff", &cutoff);
   hashmap_add(talesf_kwargs, "c_upstream", &c_upstream);
+  hashmap_add(talesf_kwargs, "use_gpu", &use_gpu);
   hashmap_add(talesf_kwargs, "num_procs", &num_procs);
   hashmap_add(talesf_kwargs, "organism_name", "");
   

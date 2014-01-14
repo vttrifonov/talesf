@@ -53,7 +53,7 @@ cdef get_best_score(rvd_seq, Hashmap *rvdscores):
 cdef extern from "talesf.h":
     int run_talesf_task(Hashmap *kwargs)
 
-def ScoreTalesfTask(char *seqfilename, rvd_string, char *output_filepath, char *log_filepath, bint forwardonly, int c_upstream, double cutoff, int numprocs, char *organism_name):
+def ScoreTalesfTask(char *seqfilename, rvd_string, char *output_filepath, char *log_filepath, bint forwardonly, int c_upstream, double cutoff, int numprocs, int use_gpu, char *organism_name):
     
     cdef:
         int i, j
@@ -104,18 +104,22 @@ def ScoreTalesfTask(char *seqfilename, rvd_string, char *output_filepath, char *
     for i in range(rvd_seq_len):
         rvd_seq[i] = rvd_to_int[split_rvd_string[i]]
     
+    cdef int scoring_matrix_length = hashmap_size(diresidue_scores)
+    
     hashmap_add(talesf_kwargs, "seq_filename", seqfilename)
     hashmap_add(talesf_kwargs, "rvd_seq", rvd_seq)
     hashmap_add(talesf_kwargs, "rvd_seq_len", &rvd_seq_len)
     hashmap_add(talesf_kwargs, "rvd_string", rvd_string_ptr)
     hashmap_add(talesf_kwargs, "best_score", &best_score)
     hashmap_add(talesf_kwargs, "scoring_matrix", scoring_matrix)
+    hashmap_add(talesf_kwargs, "scoring_matrix_length", &scoring_matrix_length)
     hashmap_add(talesf_kwargs, "output_filepath", output_filepath)
     hashmap_add(talesf_kwargs, "log_filepath", log_filepath)
     hashmap_add(talesf_kwargs, "weight", &weight)
     hashmap_add(talesf_kwargs, "cutoff", &cutoff)
     hashmap_add(talesf_kwargs, "c_upstream", &c_upstream)
     hashmap_add(talesf_kwargs, "num_procs", &numprocs)
+    hashmap_add(talesf_kwargs, "use_gpu", &use_gpu)
     hashmap_add(talesf_kwargs, "organism_name", organism_name)
     
     hashmap_add(talesf_kwargs, "forward_only", &forwardonly)
