@@ -621,9 +621,6 @@ void gpu_the_whole_shebang(kseq_t *seq, double **lookahead_arrays, Array *result
   unsigned int *rvd_seqs_lens = hashmap_get(talesf_kwargs, "rvd_seqs_lens");
   double **scoring_matrix = hashmap_get(talesf_kwargs, "scoring_matrix");
   
-  unsigned int *d_rvd_pair = hashmap_get(talesf_kwargs, "d_rvd_pair");
-  double *d_scoring_matrix = hashmap_get(talesf_kwargs, "d_scoring_matrix");
-  size_t sm_pitch = *((size_t *) hashmap_get(talesf_kwargs, "sm_pitch"));
   unsigned char *d_prelim_results = hashmap_get(talesf_kwargs, "d_prelim_results");
   int *d_prelim_results_indexes = hashmap_get(talesf_kwargs, "d_prelim_results_indexes");
   unsigned char *prelim_results = hashmap_get(talesf_kwargs, "prelim_results");
@@ -637,10 +634,16 @@ void gpu_the_whole_shebang(kseq_t *seq, double **lookahead_arrays, Array *result
   cutoffs[0] = lookahead_arrays[0][rvd_seqs_lens[0] - 1];
   cutoffs[1] = lookahead_arrays[1][rvd_seqs_lens[1] - 1];
   
-  int seq_index_index_max = RunPairedFindBindingSitesKeepScores(d_reference_sequence, d_rvd_pair, d_scoring_matrix, sm_pitch, d_prelim_results, d_prelim_results_indexes,
+  float gpu_cutoffs[2];
+  gpu_cutoffs[0] = (float) cutoffs[0];
+  gpu_cutoffs[1] = (float) cutoffs[1];
+  
+  //int RunPairedFindBindingSitesKeepScores( unsigned char *prelim_results, int *prelim_results_indexes, unsigned long reference_window_size, int score_block_x, int score_block_y, unsigned int *rvd_lengths, char *ref_seq, unsigned long ref_seq_len, float *cutoffs, int c_upstream);
+
+  int seq_index_index_max = RunPairedFindBindingSitesKeepScores(d_reference_sequence, d_prelim_results, d_prelim_results_indexes,
                                                             prelim_results, prelim_results_indexes,
                                                             reference_window_size, score_block_x, score_block_y, rvd_seqs_lens, seq->seq.s,
-                                                            seq->seq.l, cutoffs, c_upstream);
+                                                            seq->seq.l, gpu_cutoffs, c_upstream);
   #pragma omp parallel for schedule(static)
   for (int k = 0; k < 4; k++) {
     
@@ -778,8 +781,7 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   #ifdef PTF_GPU_ENABLED
   int scoring_matrix_length = *((int *) hashmap_get(kwargs, "scoring_matrix_length"));
   unsigned int *d_rvd_pair;
-  double *d_scoring_matrix;
-  size_t sm_pitch;
+  float *d_scoring_matrix;
   unsigned char *d_prelim_results;
   int *d_prelim_results_indexes;
   unsigned char *prelim_results;
@@ -789,17 +791,29 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   int score_block_x;
   int score_block_y;
   
-  
+  double *rvd_score_ptr = NULL;
+  float *gpu_scoring_matrix_bak = NULL;
+  float **gpu_scoring_matrix = NULL;
   
   if (use_gpu) {
     
-    RunPairedFindBindingSitesKeepScores_init(&d_rvd_pair, &d_scoring_matrix, &sm_pitch, &d_prelim_results, &d_prelim_results_indexes, &d_reference_sequence,
-                                             &prelim_results, &prelim_results_indexes, &reference_window_size, &score_block_x, &score_block_y,
-                                             rvd_seqs, scoring_matrix, rvd_seqs_lens, scoring_matrix_length);
+    gpu_scoring_matrix_bak = (float*) calloc(scoring_matrix_length * 5, sizeof(float));
+    gpu_scoring_matrix = (float**) calloc(scoring_matrix_length, sizeof(float*));
     
-    hashmap_add(kwargs, "d_rvd_pair", d_rvd_pair);
-    hashmap_add(kwargs, "d_scoring_matrix", d_scoring_matrix);
-    hashmap_add(kwargs, "sm_pitch", &sm_pitch);
+    for (int i = 0; i < scoring_matrix_length; i++) {
+      rvd_score_ptr = scoring_matrix[i];
+      gpu_scoring_matrix[i] = gpu_scoring_matrix_bak+5*i;
+      gpu_scoring_matrix[i][0] = (float) rvd_score_ptr[0];
+      gpu_scoring_matrix[i][1] = (float) rvd_score_ptr[1];
+      gpu_scoring_matrix[i][2] = (float) rvd_score_ptr[2];
+      gpu_scoring_matrix[i][3] = (float) rvd_score_ptr[3];
+      gpu_scoring_matrix[i][4] = (float) rvd_score_ptr[4];
+    }
+    
+    RunPairedFindBindingSitesKeepScores_init(&d_rvd_pair, &d_scoring_matrix, &d_prelim_results, &d_prelim_results_indexes, &d_reference_sequence,
+                                             &prelim_results, &prelim_results_indexes, &reference_window_size, &score_block_x, &score_block_y,
+                                             rvd_seqs, gpu_scoring_matrix, rvd_seqs_lens, scoring_matrix_length);
+    
     hashmap_add(kwargs, "d_prelim_results", d_prelim_results);
     hashmap_add(kwargs, "d_prelim_results_indexes", d_prelim_results_indexes);
     hashmap_add(kwargs, "prelim_results", prelim_results);
@@ -844,6 +858,8 @@ int run_paired_talesf_task(Hashmap *kwargs) {
   
   #ifdef PTF_GPU_ENABLED
   if (use_gpu) {
+    free(gpu_scoring_matrix);
+    free(gpu_scoring_matrix_bak);
     RunPairedFindBindingSitesKeepScores_cleanup(d_reference_sequence, d_rvd_pair, d_scoring_matrix, d_prelim_results, d_prelim_results_indexes, prelim_results, prelim_results_indexes);
   }
   #endif
