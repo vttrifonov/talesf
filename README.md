@@ -4,7 +4,7 @@ This directory contains the source code for the TAL Effector Site Finder.
 
 All source code is available under an ISC license.
 
-Copyright (c) 2011-2012, Daniel S. Standage <daniel.standage@gmail.com> and
+Copyright (c) 2011-2015, Daniel S. Standage <daniel.standage@gmail.com> and
 Erin Doyle <edoyle@iastate.edu> with modifications by Nick Booher <njbooher@gmail.com>.
 
 Permission to use, copy, modify, and/or distribute this software for any
@@ -24,14 +24,14 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 TALESF is a C library for identifying potential binding sites for transcription
 activator-like (TAL) effectors in a given genomic sequence. Compiling and
 running this program requires a C compiler with OpenMP support (such as GCC 4.2
-or higher). [libbcutils](https://github.com/njbooher/boglab_cutils) must also be installed. To compile TALESF, enter the following commands in the directory containing this file.
+or higher). [libbcutils](https://github.com/boglab/cutils) must also be installed. To compile TALESF, enter the following commands in the directory containing this file.
 ```
   make
   make install
   make frontend
 ```
 
-To install the Cython wrapper (only required if you want to use the Python frontend from [boglab_tools](https://github.com/njbooher/boglab_tools)), install [Cython](http://pypi.python.org/pypi/Cython) then run:
+To install the Cython wrapper (only required if you want to use the Python frontend from [boglab_tools](https://github.com/boglab/talent_tools)), install [Cython](http://pypi.python.org/pypi/Cython) then run:
 
 ```
   cd cython_wrapper
