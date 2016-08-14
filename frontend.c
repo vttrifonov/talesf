@@ -16,7 +16,6 @@ void print_usage(FILE *out_stream, char *prog_name)
   fprintf( out_stream, "\nUsage: %s [options] sequence_file_path \"rvdseq\"\n"
            "  Options:\n"
            "    -c|--cupstream        sets the allowed upstream bases; 0 for T only, 1 for C only, 2 for either\n"
-           "    -g|--usegpu           enables GPU acceleration for large sequences; has no effect if libpairedtalesf was not compiled with GPU support\n"
            "    -f|--forwardonly      only search the forward strand of the sequence\n"
            "    -h|--help             print this help message and exit\n"
            "    -n|--numprocs         the number of processors to use; default is 1\n"
@@ -38,7 +37,6 @@ int main(int argc, char **argv)
   int num_procs;
   char out_filepath[256];
   int c_upstream;
-  int use_gpu;
   double weight;
   double cutoff;
 
@@ -50,7 +48,6 @@ int main(int argc, char **argv)
   cutoff = 3.0;
   log_filepath = "NA";
   c_upstream = 0;
-  use_gpu = 0;
 
   prog_name = argv[0];
 
@@ -65,7 +62,6 @@ int main(int argc, char **argv)
     { "weight", required_argument, NULL, 'w' },
     { "cutoffmult", required_argument, NULL, 'x' },
     { "cupstream", required_argument, NULL, 'c' },
-    { "usegpu", no_argument, NULL, 'g' },
     { NULL, no_argument, NULL, 0 },
   };
 
@@ -93,10 +89,6 @@ int main(int argc, char **argv)
 
         break;
         
-      case 'g':
-        use_gpu = 1;
-        break;
-      
       case 'h':
         print_usage(stdout, prog_name);
         return 0;
@@ -202,7 +194,6 @@ int main(int argc, char **argv)
   hashmap_add(talesf_kwargs, "weight", &weight);
   hashmap_add(talesf_kwargs, "cutoff", &cutoff);
   hashmap_add(talesf_kwargs, "c_upstream", &c_upstream);
-  hashmap_add(talesf_kwargs, "use_gpu", &use_gpu);
   hashmap_add(talesf_kwargs, "num_procs", &num_procs);
   hashmap_add(talesf_kwargs, "organism_name", "");
   

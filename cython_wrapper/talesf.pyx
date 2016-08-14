@@ -53,7 +53,7 @@ cdef get_best_score(rvd_seq, Hashmap *rvdscores):
 cdef extern from "talesf.h":
     int run_talesf_task(Hashmap *kwargs)
 
-def ScoreTalesfTask(char *seqfilename, rvd_string, char *output_filepath, char *log_filepath, bint forwardonly, int c_upstream, double cutoff, int numprocs, int use_gpu, char *organism_name):
+def ScoreTalesfTask(char *seqfilename, rvd_string, char *output_filepath, char *log_filepath, bint forwardonly, int c_upstream, double cutoff, int numprocs, char *organism_name):
     
     cdef:
         int i, j
@@ -119,7 +119,6 @@ def ScoreTalesfTask(char *seqfilename, rvd_string, char *output_filepath, char *
     hashmap_add(talesf_kwargs, "cutoff", &cutoff)
     hashmap_add(talesf_kwargs, "c_upstream", &c_upstream)
     hashmap_add(talesf_kwargs, "num_procs", &numprocs)
-    hashmap_add(talesf_kwargs, "use_gpu", &use_gpu)
     hashmap_add(talesf_kwargs, "organism_name", organism_name)
     
     hashmap_add(talesf_kwargs, "forward_only", &forwardonly)
