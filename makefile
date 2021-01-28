@@ -1,20 +1,22 @@
-LIB = libpairedtalesf.so
-PROG = pairedtalesf
+NAME=pairedtalesf
+CC = gcc-9
+CFLAGS = -I . -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64
+BCUTILS = -L bcutils -lbcutils
+NAMELIB = -L lib -l$(NAME)
 
 all: default
 
 default:
-	gcc -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64 -o $(LIB) pairedtalesf.c -lbcutils -lm -lz -fopenmp -fPIC -shared -rdynamic
+	$(CC) $(CFLAGS) -o lib/lib$(NAME).so $(NAME).c $(BCUTILS) -lm -lz -fopenmp -fPIC -shared -rdynamic
 
 frontend:
-	gcc -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64 -I /usr/include/pairedtalesf -o $(PROG) frontend.c -lbcutils -lpairedtalesf -fopenmp
+	$(CC) $(CFLAGS) -o bin/$(NAME) frontend.c $(BCUTILS) $(NAMELIB) -fopenmp
 
 clean:
-	rm -f *.o *~ $(LIB) $(PROG)
+	rm -rf *.o *~ *.so *.dSYM bin/* lib/* include/*
 
 install:
-	install $(LIB) /usr/lib
-	mkdir -p /usr/include/pairedtalesf
-	cp *.h /usr/include/pairedtalesf
-	chmod 644 /usr/include/pairedtalesf/*
-	ldconfig
+	ln -sf ../bcutils/libbcutils.so lib/
+	ln -sf $(PWD)/lib/lib$(NAME).so /usr/local/lib/
+	ln -sf $(PWD)/lib/libbcutils.so /usr/local/lib/
+	ln -sf $(PWD)/bin/$(NAME) /usr/local/bin/
