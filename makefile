@@ -4,7 +4,7 @@ CFLAGS = -I . -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64
 BCUTILS = -L bcutils -lbcutils
 NAMELIB = -L lib -l$(NAME)
 
-all: default
+all: default frontend
 
 default:
 	$(CC) $(CFLAGS) -o lib/lib$(NAME).so $(NAME).c $(BCUTILS) -lm -lz -fopenmp -fPIC -shared -rdynamic
