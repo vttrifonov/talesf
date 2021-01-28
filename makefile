@@ -1,18 +1,20 @@
-LIB = libtalesf.so
-PROG = talesf
+CC = gcc-9
+CFLAGS = -I . -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64
+BCUTILS = -L lib -lbcutils
+TALESF = -L bcutils -ltalesf
 
 default:
-	gcc -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64 -o $(LIB) talesf.c -lbcutils -lm -lz -fopenmp -fPIC -shared -rdynamic
+	$(CC) $(CFLAGS) -o lib/libtalesf.so talesf.c $(BCUTILS) -lm -lz -fopenmp -fPIC -shared -rdynamic
 
 frontend:
-	gcc -fmax-errors=1 -std=gnu99 -g -O3 -Wall -m64 -I /usr/include/talesf -o $(PROG) frontend.c -lbcutils -ltalesf -fopenmp
+	$(CC) $(CFLAGS) -o bin/talesf frontend.c $(BCUTILS) $(TALESF) -fopenmp
 
 clean:
-	rm -f *.o *~ $(LIB)
+	rm -rf *.o *~ *.so *.dSYM bin/* lib/* include/*
 
 install:
-	install $(LIB) /usr/lib
-	mkdir -p /usr/include/talesf
-	cp *.h /usr/include/talesf
-	chmod 644 /usr/include/talesf/*
-	ldconfig
+	ln -sf ../bcutils/libbcutils.so lib/
+	ln -sf $(PWD)/lib/libtalesf.so /usr/local/lib/
+	ln -sf $(PWD)/lib/libbcutils.so /usr/local/lib/
+	ln -sf $(PWD)/bin/talesf /usr/local/bin/
+
